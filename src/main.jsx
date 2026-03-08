@@ -1,0 +1,77 @@
+import React, { useState } from 'react';
+import ReactDOM from 'react-dom/client';
+import { HashRouter } from 'react-router-dom';
+import App from './App.jsx';
+import SplashScreen from './components/SplashScreen.jsx';
+import { Web3Provider } from './context/Web3Provider';
+import { registerSW } from 'virtual:pwa-register';
+
+// Register PWA Service Worker
+registerSW({
+  onNeedRefresh() {
+    console.log("New content available, click on reload button to update.");
+  },
+  onOfflineReady() {
+    console.log("App is ready to work offline.");
+  },
+});
+
+import './index.css';
+
+// Simple Error Boundary for Startup
+class GlobalErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error("Global Startup Error:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: 20, color: 'white', background: '#333', height: '100vh', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
+          <h1 style={{ color: '#ff4d4f' }}>Startup Error</h1>
+          <pre style={{ background: '#000', padding: 20, borderRadius: 8, maxWidth: '80%', overflow: 'auto' }}>
+            {this.state.error?.toString()}
+          </pre>
+          <button onClick={() => window.location.reload()} style={{ marginTop: 20, padding: '10px 20px', cursor: 'pointer' }}>
+            Retry
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+function Root() {
+  const [showSplash, setShowSplash] = useState(() => !localStorage.getItem('splash_shown'));
+
+  const handleSplashComplete = () => {
+    localStorage.setItem('splash_shown', 'true');
+    setShowSplash(false);
+  };
+
+  return (
+    <GlobalErrorBoundary>
+      <React.StrictMode>
+        <HashRouter>
+          {showSplash && <SplashScreen onComplete={handleSplashComplete} />}
+          <Web3Provider>
+            <App />
+          </Web3Provider>
+        </HashRouter>
+      </React.StrictMode>
+    </GlobalErrorBoundary>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<Root />);

@@ -1,0 +1,130 @@
+
+> redflag-app@0.0.0 lint
+> eslint .
+
+
+/home/klk/Desktop/stitch/redflag-app/functions/index.js
+   1:19  error  'require' is not defined  no-undef
+   2:15  error  'require' is not defined  no-undef
+   6:16  error  'require' is not defined  no-undef
+   6:97  error  'process' is not defined  no-undef
+  10:16  error  'require' is not defined  no-undef
+  11:15  error  'require' is not defined  no-undef
+  15:88  error  'process' is not defined  no-undef
+  16:90  error  'process' is not defined  no-undef
+  35:1   error  'exports' is not defined  no-undef
+  80:1   error  'exports' is not defined  no-undef
+
+/home/klk/Desktop/stitch/redflag-app/scripts/set_paid.js
+   7:36  error  'process' is not defined  no-undef
+   9:21  error  'process' is not defined  no-undef
+  10:21  error  'process' is not defined  no-undef
+  31:9   error  'process' is not defined  no-undef
+
+/home/klk/Desktop/stitch/redflag-app/scripts/verify_user.js
+  1:7   error  'admin' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u           no-unused-vars
+  1:15  error  'require' is not defined                                                                        no-undef
+  2:7   error  'serviceAccount' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u  no-unused-vars
+  2:24  error  'require' is not defined                                                                        no-undef
+
+/home/klk/Desktop/stitch/redflag-app/src/components/AdComponent.jsx
+  12:11  error  'adRef' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                                         no-unused-vars
+  19:5   error  React Hook "useEffect" is called conditionally. React Hooks must be called in the exact same order in every component render  react-hooks/rules-of-hooks
+
+/home/klk/Desktop/stitch/redflag-app/src/components/ProtectedRoute.jsx
+  6:72  error  'requirePaid' is assigned a value but never used  no-unused-vars
+
+/home/klk/Desktop/stitch/redflag-app/src/components/VideoCall.jsx
+  72:8  warning  React Hook useEffect has missing dependencies: 'callType', 'incomingSignal', 'matchId', 'onEnd', and 'userId'. Either include them or remove the dependency array. If 'onEnd' changes too often, find the parent component that defines it and wrap that definition in useCallback  react-hooks/exhaustive-deps
+  89:8  warning  React Hook useEffect has a missing dependency: 'onEnd'. Either include it or remove the dependency array                                                                                                                                                                            react-hooks/exhaustive-deps
+
+/home/klk/Desktop/stitch/redflag-app/src/context/DatingContext.jsx
+   73:27  error  'error' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u  no-unused-vars
+  156:27  error  'error' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u  no-unused-vars
+  238:23  error  'error' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u  no-unused-vars
+
+/home/klk/Desktop/stitch/redflag-app/src/pages/Alerts.jsx
+    1:27  error  'useRef' is defined but never used. Allowed unused vars must match /^[A-Z_]/u  no-unused-vars
+  111:27  error  'alert' is defined but never used                                              no-unused-vars
+
+/home/klk/Desktop/stitch/redflag-app/src/pages/ChatLobby.jsx
+  86:65  error  Error: Cannot call impure function during render
+
+`Math.random` is an impure function. Calling an impure function can produce unstable results that update unpredictably when the component happens to re-render. (https://react.dev/reference/rules/components-and-hooks-must-be-pure#components-and-hooks-must-be-idempotent).
+
+  84 |                                                 </span>
+  85 |                                                 <span className="text-[10px] font-bold text-green-600 dark:text-green-400 uppercase tracking-wide">
+> 86 |                                                     {Math.floor(Math.random() * 50) + 120} Online
+     |                                                                 ^^^^^^^^^^^^^ Cannot call impure function
+  87 |                                                 </span>
+  88 |                                             </div>
+  89 |                                         ) : (  react-hooks/purity
+
+/home/klk/Desktop/stitch/redflag-app/src/pages/CommunityRoom.jsx
+  105:27  error  'error' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u  no-unused-vars
+
+/home/klk/Desktop/stitch/redflag-app/src/pages/DateCheckIn.jsx
+  117:24  warning  The ref value 'sirenAudio.current' will likely have changed by the time this effect cleanup function runs. If this ref points to a node rendered by React, copy 'sirenAudio.current' to a variable inside the effect, and use that variable in the cleanup function                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       react-hooks/exhaustive-deps
+  123:40  error    Compilation Skipped: Existing memoization could not be preserved
+
+React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. The inferred dependencies did not match the manually specified dependencies, which could cause the value to change more or less frequently than expected. The inferred dependency was `meetingProfile`, but the source dependencies were [contacts, toast]. Inferred different dependency than source.
+
+  121 |
+  122 |     // Helper to simulate sending SMS/WhatsApp
+> 123 |     const notifyContacts = useCallback((type, message, locationLink = null) => {
+      |                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 124 |         if (contacts.length === 0) return;
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 125 |
+      …
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 155 |         }
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 156 |     }, [contacts, toast]);
+      | ^^^^^^ Could not preserve existing manual memoization
+  157 |
+  158 |     // Start guard
+  159 |     const startTimer = () => {  react-hooks/preserve-manual-memoization
+  156:8   warning  React Hook useCallback has a missing dependency: 'meetingProfile'. Either include it or remove the dependency array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       react-hooks/exhaustive-deps
+
+/home/klk/Desktop/stitch/redflag-app/src/pages/DatingChat.jsx
+   15:10  error  'emojiService' is defined but never used. Allowed unused vars must match /^[A-Z_]/u                  no-unused-vars
+   29:12  error  'isAnalyzing' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u          no-unused-vars
+   30:12  error  'riskAlert' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u            no-unused-vars
+   40:11  error  'localVideoRef' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u        no-unused-vars
+   41:11  error  'remoteVideoRef' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u       no-unused-vars
+   47:11  error  'headers' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u              no-unused-vars
+  232:71  error  'e' is defined but never used                                                                        no-unused-vars
+  232:74  error  Empty block statement                                                                                no-empty
+  256:11  error  'runGuardianAnalysis' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u  no-unused-vars
+
+/home/klk/Desktop/stitch/redflag-app/src/pages/Management.jsx
+   44:27  error  'error' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u  no-unused-vars
+  299:18  error  'err' is defined but never used                                                        no-unused-vars
+
+/home/klk/Desktop/stitch/redflag-app/src/pages/NotificationsPage.jsx
+  60:26  error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+  58 |     useEffect(() => {
+  59 |         if (!user) {
+> 60 |             if (loading) setLoading(false);
+     |                          ^^^^^^^^^^ Avoid calling setState() directly within an effect
+  61 |             return;
+  62 |         }
+  63 |  react-hooks/set-state-in-effect
+  70:8   warning  React Hook useEffect has a missing dependency: 'loading'. Either include it or remove the dependency array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       react-hooks/exhaustive-deps
+
+/home/klk/Desktop/stitch/redflag-app/src/services/callService.js
+  12:5  error  'activeCallType' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u  no-unused-vars
+
+/home/klk/Desktop/stitch/redflag-app/src/services/emojiService.js
+  77:27  error  'animate' is assigned a value but never used  no-unused-vars
+
+✖ 48 problems (43 errors, 5 warnings)
+
