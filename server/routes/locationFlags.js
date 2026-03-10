@@ -25,7 +25,7 @@ router.post('/', requireAuth, async (req, res) => {
     const { rows } = await db.query(
       `INSERT INTO location_flags (user_id, place_id, place_name, lat, lng, flag_type, comment, media)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-      [req.user.id, place_id, place_name, lat, lng, flag_type || 'red', comment, JSON.stringify(media || [])]
+      [req.user.id, place_id, place_name, lat, lng, flag_type || 'red', comment, JSON.stringify(media ?? [])]
     );
     const flag = rows[0];
     if (_io) _io.emit('flag:new', flag);
