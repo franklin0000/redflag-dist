@@ -209,3 +209,18 @@ BEGIN
   LIMIT p_limit;
 END;
 $$ LANGUAGE plpgsql;
+
+-- Location Flags (RedFlagMap)
+CREATE TABLE IF NOT EXISTS location_flags (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     UUID REFERENCES users(id) ON DELETE CASCADE,
+  place_id    TEXT,
+  place_name  TEXT,
+  lat         DOUBLE PRECISION NOT NULL,
+  lng         DOUBLE PRECISION NOT NULL,
+  flag_type   TEXT NOT NULL DEFAULT 'red',   -- 'red' | 'green'
+  comment     TEXT,
+  media       JSONB DEFAULT '[]',
+  created_at  TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_location_flags_lat_lng ON location_flags(lat, lng);

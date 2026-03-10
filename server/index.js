@@ -45,6 +45,8 @@ app.use('/api/reports',       require('./routes/reports'));
 app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/searches',      require('./routes/searches'));
 app.use('/api/stats',         require('./routes/stats'));
+const locationFlagsRouter = require('./routes/locationFlags');
+app.use('/api/location-flags', locationFlagsRouter);
 
 // ── File Upload (any route) ───────────────────────────────────
 const upload = require('./middleware/upload');
@@ -122,6 +124,8 @@ io.use(async (socket, next) => {
     next(new Error('Auth failed'));
   }
 });
+
+locationFlagsRouter.setIo(io);
 
 io.on('connection', (socket) => {
   const userId = socket.user.id;

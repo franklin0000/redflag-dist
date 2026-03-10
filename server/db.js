@@ -16,6 +16,22 @@ pool.on('error', (err) => {
   console.error('PostgreSQL pool error:', err.message);
 });
 
+// Auto-migrate: ensure location_flags table exists
+pool.query(`
+  CREATE TABLE IF NOT EXISTS location_flags (
+    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id    UUID REFERENCES users(id) ON DELETE CASCADE,
+    place_id   TEXT,
+    place_name TEXT,
+    lat        DOUBLE PRECISION NOT NULL,
+    lng        DOUBLE PRECISION NOT NULL,
+    flag_type  TEXT NOT NULL DEFAULT 'red',
+    comment    TEXT,
+    media      JSONB DEFAULT '[]',
+    created_at TIMESTAMPTZ DEFAULT NOW()
+  )
+`).catch(err => console.error('Migration error (location_flags):', err.message));
+
 module.exports = {
   query: (text, params) => pool.query(text, params),
   pool,
