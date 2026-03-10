@@ -19,8 +19,12 @@ async function apiFetch(path, opts = {}) {
         ...opts,
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...opts.headers },
     });
-    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Request failed');
-    return res.json();
+    const text = await res.text();
+    if (!text || !text.trim()) throw new Error('Server is waking up. Please try again in a moment.');
+    let data;
+    try { data = JSON.parse(text); } catch { throw new Error('Server returned invalid response. Please try again.'); }
+    if (!res.ok) throw new Error(data.error || 'Request failed');
+    return data;
 }
 
 export default function RedFlagMap() {
