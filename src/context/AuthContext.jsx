@@ -45,8 +45,8 @@ export const AuthProvider = ({ children }) => {
         };
     }
 
-    const signUp = async (email, password, name) => {
-        const data = await authApi.register(email, password, name);
+    const signUp = async (email, password, name, gender) => {
+        const data = await authApi.register(email, password, name, gender);
         authApi.setToken(data.token);
         authApi.setRefreshToken(data.refresh_token);
         if (mountedRef.current) setUser(normalizeUser(data.user));

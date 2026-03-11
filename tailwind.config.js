@@ -1,3 +1,5 @@
+const plugin = require('tailwindcss/plugin');
+
 /** @type {import('tailwindcss').Config} */
 export default {
   content: [
@@ -32,5 +34,9 @@ export default {
       }
     },
   },
-  plugins: [],
+  plugins: [
+    plugin(function ({ addVariant }) {
+      addVariant('dating', ['&[data-theme="dating"]', '[data-theme="dating"] &']);
+    })
+  ],
 }

@@ -12,6 +12,7 @@ export default function FacialScan() {
     const [status, setStatus] = useState('Initializing handshake...');
     const [isError, setIsError] = useState(false);
     const [errorDetail, setErrorDetail] = useState('');
+    const [consentGranted, setConsentGranted] = useState(false);
 
     const previewUrl = useMemo(() => file ? URL.createObjectURL(file) : null, [file]);
 
@@ -63,44 +64,37 @@ export default function FacialScan() {
                 setProgress(40);
                 await new Promise(r => setTimeout(r, 400));
 
-                // ── STEP 2: PimEyes + Google Vision in parallel ──
+                // ── STEP 2: DeepFace + Sherlock Background Check ──
                 if (!isMounted) return;
-                setStatus('Connecting to RedFlag recognition engine...');
+                setStatus('Connecting to Local Background Check engine...');
                 setProgress(48);
 
-                const { searchFace, buildTargetedSearches } = await import('../services/pimEyesService');
-                const { visionService } = await import('../services/visionService');
-
                 if (!isMounted) return;
-                setStatus('Dual-engine search in progress...');
+                setStatus('DeepFace & Sherlock search in progress...');
                 setProgress(55);
 
-                const [pimResult, visionItems] = await Promise.all([
-                    // PimEyes: facial recognition search
-                    searchFace(file, (p) => {
-                        if (isMounted) setProgress(55 + Math.floor(p * 0.35));
-                    }),
-                    // Google Vision: reverse image search
-                    visionService.analyzeImage(base64String).catch(() => []),
-                ]);
+                const formData = new FormData();
+                formData.append('file', file);
+
+                const { authApi } = await import('../services/api');
+                const token = authApi.getToken();
+                const BASE = import.meta.env.VITE_API_URL || '';
+
+                const response = await fetch(`${BASE}/api/searches/background-check`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token}` },
+                    body: formData
+                });
+
+                if (!response.ok) throw new Error('Background Search failed');
+                const data = await response.json();
 
                 if (!isMounted) return;
                 setProgress(95);
                 setStatus('Merging results...');
 
                 // ── STEP 3: Merge results ──
-                const visionRealItems = (visionItems || []).filter(r => !r.isTargetedSearch);
-                const faceItems = pimResult.items || buildTargetedSearches(null);
-
-                // Deduplicate by URL
-                const seen = new Set();
-                const merged = [];
-                for (const item of [...visionRealItems, ...faceItems]) {
-                    if (!seen.has(item.url)) {
-                        seen.add(item.url);
-                        merged.push(item);
-                    }
-                }
+                const merged = data.results || [];
 
                 await new Promise(r => setTimeout(r, 300));
                 if (!isMounted) return;
@@ -166,20 +160,38 @@ export default function FacialScan() {
                         </p>
                     </div>
 
-                    <label className="block w-full cursor-pointer group">
-                        <div className="relative overflow-hidden rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-8 transition-all group-hover:border-primary/50 group-hover:bg-primary/5">
+                    <div className="space-y-4">
+                        <div className="flex items-start gap-3 bg-red-50 dark:bg-red-900/10 p-3 rounded-lg border border-red-200 dark:border-red-800/50">
                             <input
-                                type="file"
-                                className="hidden"
-                                accept="image/*"
-                                onChange={handleFileSelect}
+                                type="checkbox"
+                                id="consent"
+                                checked={consentGranted}
+                                onChange={(e) => setConsentGranted(e.target.checked)}
+                                className="mt-1 w-4 h-4 text-primary bg-white border-red-300 rounded focus:ring-primary dark:focus:ring-primary dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600 cursor-pointer"
                             />
-                            <div className="flex flex-col items-center gap-3">
-                                <span className="material-icons text-4xl text-slate-400 group-hover:text-primary transition-colors">add_a_photo</span>
-                                <span className="font-semibold text-slate-600 dark:text-slate-300 group-hover:text-primary">Select Photo</span>
-                            </div>
+                            <label htmlFor="consent" className="text-xs text-red-700 dark:text-red-400 cursor-pointer select-none">
+                                <strong>Ethics & Privacy Disclaimer:</strong> I confirm I have obtained necessary consent or am acting within my legal rights to search this individual. I will not use this information for harassment, stalking, or illegal purposes.
+                            </label>
                         </div>
-                    </label>
+
+                        <label className={`block w-full transition-all ${consentGranted ? 'cursor-pointer group' : 'cursor-not-allowed opacity-50 grayscale'}`}>
+                            <div className={`relative overflow-hidden rounded-2xl border-2 border-dashed ${consentGranted ? 'border-primary/50 bg-primary/5 hover:border-primary hover:bg-primary/10' : 'border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50'} p-8 transition-all`}>
+                                <input
+                                    type="file"
+                                    className="hidden"
+                                    accept="image/*"
+                                    disabled={!consentGranted}
+                                    onChange={handleFileSelect}
+                                />
+                                <div className="flex flex-col items-center gap-3">
+                                    <span className={`material-icons text-4xl ${consentGranted ? 'text-primary' : 'text-slate-400'} transition-colors`}>add_a_photo</span>
+                                    <span className={`font-semibold ${consentGranted ? 'text-primary' : 'text-slate-600 dark:text-slate-300'}`}>
+                                        {consentGranted ? 'Select Photo' : 'Accept Terms to Upload'}
+                                    </span>
+                                </div>
+                            </div>
+                        </label>
+                    </div>
                 </div>
             </div>
         )

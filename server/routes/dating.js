@@ -195,7 +195,9 @@ router.get('/messages/:matchId', requireAuth, async (req, res) => {
     if (!match.rows.length) return res.status(403).json({ error: 'Not your match' });
 
     const { rows } = await db.query(
-      'SELECT * FROM messages WHERE match_id = $1 ORDER BY created_at ASC',
+      `SELECT * FROM messages WHERE match_id = $1
+       AND (expires_at IS NULL OR expires_at > NOW())
+       ORDER BY created_at ASC`,
       [req.params.matchId]
     );
     res.json(rows);

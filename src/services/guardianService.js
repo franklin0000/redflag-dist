@@ -3,9 +3,8 @@
  *
  * Two responsibilities:
  *  1. Risk analysis — heuristic scan of chat messages for red flags
- *  2. Guardian sessions — real-time Supabase-backed safety sessions
+ *  2. Guardian sessions — real backend API + Socket.io real-time safety sessions
  */
-// Guardian service — uses localStorage for session data (no Supabase dependency)
 
 // ── Risk patterns ─────────────────────────────────────────────────────────────
 const RISK_PATTERNS = {
@@ -24,31 +23,18 @@ const RISK_PATTERNS = {
     ],
 };
 
-/**
- * Analyse a chat message for potential risks.
- * @returns {{ riskLevel: 'safe'|'medium'|'high', flags: string[], advice: string|null }}
- */
 export async function analyzeMessageRisk(text) {
     await new Promise(resolve => setTimeout(resolve, 300));
-
     const lowerText = text.toLowerCase();
     const flags = [];
     let riskScore = 0;
-
     RISK_PATTERNS.financial.forEach(p => { if (p.test(lowerText)) { flags.push('Financial Request'); riskScore += 3; } });
     RISK_PATTERNS.harassment.forEach(p => { if (p.test(lowerText)) { flags.push('High Pressure / Inappropriate'); riskScore += 2; } });
     RISK_PATTERNS.scam_tactics.forEach(p => { if (p.test(lowerText)) { flags.push('Suspicious Pattern'); riskScore += 2; } });
-
     let riskLevel = 'safe';
     let advice = null;
-    if (riskScore >= 3) {
-        riskLevel = 'high';
-        advice = 'Guardian Alert: High-risk patterns detected. Do not send money or share financial info.';
-    } else if (riskScore > 0) {
-        riskLevel = 'medium';
-        advice = 'Guardian Tip: Be cautious with requests to move off-platform or share personal details.';
-    }
-
+    if (riskScore >= 3) { riskLevel = 'high'; advice = 'Guardian Alert: High-risk patterns detected. Do not send money or share financial info.'; }
+    else if (riskScore > 0) { riskLevel = 'medium'; advice = 'Guardian Tip: Be cautious with requests to move off-platform or share personal details.'; }
     return { riskLevel, flags: [...new Set(flags)], advice };
 }
 
@@ -58,122 +44,117 @@ export async function logRiskAnalysis(userId, matchId, analysis) {
     }
 }
 
-// ── Token generator ───────────────────────────────────────────────────────────
-function generateToken() {
-    const bytes = new Uint8Array(18);
-    crypto.getRandomValues(bytes);
-    return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+// ── API helpers ───────────────────────────────────────────────────────────────
+const BASE = import.meta.env.VITE_API_URL || '';
+
+function getToken() {
+    return localStorage.getItem('rf_token');
 }
 
-// ── Session management ────────────────────────────────────────────────────────
-
-/**
- * Create a new guardian session.
- * @param {string} userId
- * @param {string} daterName
- * @param {number} checkInMinutes — how often the dater must check in
- * @param {string} [dateLocation] — optional venue name/address
- * @returns {Promise<object>} session row
- */
-const STORAGE_KEY = 'rf_guardian_sessions';
-
-function getSessions() {
-    try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); } catch { return {}; }
+async function apiRequest(path, options = {}) {
+    const token = getToken();
+    const res = await fetch(`${BASE}${path}`, {
+        ...options,
+        headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            ...(options.headers || {}),
+        },
+    });
+    if (!res.ok) throw new Error(`API ${path} failed: ${res.status}`);
+    return res.json();
 }
-function saveSessions(sessions) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions));
-}
+
+// ── Session management (backed by PostgreSQL + Socket.io) ─────────────────────
 
 export async function createGuardianSession(userId, daterName, checkInMinutes = 30, dateLocation = '') {
-    const token = generateToken();
-    const session = {
-        id: token,
-        dater_id: userId,
-        session_token: token,
-        dater_name: daterName || 'Unknown',
-        date_location: dateLocation || null,
-        check_in_minutes: checkInMinutes,
-        expires_at: new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString(),
-        is_active: true,
-        is_sos: false,
-        sentiment: 'normal',
-        last_checkin_at: new Date().toISOString(),
-        location: null,
-    };
-    const sessions = getSessions();
-    sessions[token] = session;
-    saveSessions(sessions);
-    return session;
+    return apiRequest('/api/guardian/sessions', {
+        method: 'POST',
+        body: JSON.stringify({ dater_name: daterName, date_location: dateLocation, check_in_minutes: checkInMinutes }),
+    });
 }
 
 export async function updateGuardianLocation(sessionId, lat, lng) {
-    const sessions = getSessions();
-    if (sessions[sessionId]) {
-        sessions[sessionId].location = { lat, lng, updatedAt: new Date().toISOString() };
-        sessions[sessionId].last_checkin_at = new Date().toISOString();
-        saveSessions(sessions);
+    try {
+        await apiRequest(`/api/guardian/sessions/${sessionId}/location`, {
+            method: 'PATCH',
+            body: JSON.stringify({ lat, lng }),
+        });
+    } catch (err) {
+        console.warn('[Guardian] Failed to update location:', err.message);
     }
 }
 
 export async function checkInSafe(sessionId) {
-    const sessions = getSessions();
-    if (sessions[sessionId]) {
-        sessions[sessionId].last_checkin_at = new Date().toISOString();
-        sessions[sessionId].sentiment = 'normal';
-        sessions[sessionId].is_sos = false;
-        saveSessions(sessions);
-    }
+    return apiRequest(`/api/guardian/sessions/${sessionId}/checkin`, { method: 'POST' });
 }
 
 export async function markTense(sessionId) {
-    const sessions = getSessions();
-    if (sessions[sessionId]) {
-        sessions[sessionId].sentiment = 'tense';
-        saveSessions(sessions);
-    }
+    // No dedicated endpoint — captured via SOS flow or future sentiment API
+    console.info('[Guardian] markTense', sessionId);
 }
 
-export async function triggerSOS(sessionId) {
-    const sessions = getSessions();
-    if (sessions[sessionId]) {
-        sessions[sessionId].is_sos = true;
-        sessions[sessionId].sentiment = 'alert';
-        saveSessions(sessions);
-    }
+export async function triggerSOS(sessionId, location = null) {
+    return apiRequest(`/api/guardian/sessions/${sessionId}/sos`, {
+        method: 'POST',
+        body: JSON.stringify({ location }),
+    });
 }
 
 export async function cancelSOS(sessionId) {
-    const sessions = getSessions();
-    if (sessions[sessionId]) {
-        sessions[sessionId].is_sos = false;
-        sessions[sessionId].sentiment = 'normal';
-        sessions[sessionId].last_checkin_at = new Date().toISOString();
-        saveSessions(sessions);
-    }
+    return apiRequest(`/api/guardian/sessions/${sessionId}/sos/cancel`, { method: 'POST' });
 }
 
 export async function endGuardianSession(sessionId) {
-    const sessions = getSessions();
-    if (sessions[sessionId]) {
-        sessions[sessionId].is_active = false;
-        saveSessions(sessions);
-    }
+    return apiRequest(`/api/guardian/sessions/${sessionId}/end`, { method: 'POST' });
 }
 
 export async function getSessionByToken(token) {
-    const sessions = getSessions();
-    const session = sessions[token];
-    if (!session || !session.is_active) throw new Error('Session not found');
-    return session;
+    return apiRequest(`/api/guardian/view/${token}`);
 }
 
-export function subscribeToSession(sessionId, onUpdate) {
-    // Poll localStorage every 5 seconds for updates
-    const interval = setInterval(() => {
-        const sessions = getSessions();
-        if (sessions[sessionId]) onUpdate(sessions[sessionId]);
-    }, 5000);
-    return { unsubscribe: () => clearInterval(interval) };
+export async function getMyActiveSession() {
+    return apiRequest('/api/guardian/sessions/mine');
+}
+
+/**
+ * Subscribe to real-time guardian session updates via Socket.io.
+ * Falls back to 10-second polling if Socket.io is unavailable.
+ */
+export function subscribeToSession(sessionToken, onUpdate) {
+    // Try Socket.io first
+    try {
+        const { io } = require('socket.io-client');
+        const socket = io(BASE || window.location.origin, {
+            auth: { token: getToken() },
+            transports: ['websocket'],
+        });
+        socket.emit('join_guardian', sessionToken);
+        socket.on('guardian:update', onUpdate);
+        socket.on('guardian:location', (loc) => onUpdate({ location: loc }));
+        socket.on('guardian:sos', ({ session }) => onUpdate(session));
+        socket.on('guardian:ended', () => onUpdate({ is_active: false }));
+        return {
+            unsubscribe: () => {
+                socket.off('guardian:update');
+                socket.off('guardian:location');
+                socket.off('guardian:sos');
+                socket.off('guardian:ended');
+                socket.disconnect();
+            },
+        };
+    } catch {
+        // Fallback: poll the API every 10 seconds
+        const interval = setInterval(async () => {
+            try {
+                const session = await getSessionByToken(sessionToken);
+                onUpdate(session);
+            } catch {
+                // Session ended or expired
+            }
+        }, 10000);
+        return { unsubscribe: () => clearInterval(interval) };
+    }
 }
 
 export default { analyzeMessageRisk, logRiskAnalysis };

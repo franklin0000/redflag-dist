@@ -16,7 +16,7 @@ const resetLimiter = makeLimit(3, 60);      // 3 reset requests per hour
 
 // POST /api/auth/register
 router.post('/register', registerLimiter, async (req, res) => {
-  const { email, password, name } = req.body;
+  const { email, password, name, gender } = req.body;
   if (!email || !password || !name)
     return res.status(400).json({ error: 'email, password, name required' });
   if (password.length < 6)
@@ -32,6 +32,15 @@ router.post('/register', registerLimiter, async (req, res) => {
        VALUES ($1, $2, $3, $4) RETURNING *`,
       [email.toLowerCase(), hash, name, username]
     );
+    // Save gender to dating profile immediately if provided
+    const userId = rows[0].id;
+    if (gender) {
+      await db.query(
+        `INSERT INTO dating_profiles (user_id, gender) VALUES ($1, $2)
+         ON CONFLICT (user_id) DO UPDATE SET gender = $2`,
+        [userId, gender]
+      ).catch(() => {}); // non-fatal if dating_profiles table isn't ready yet
+    }
     const user = rows[0];
     const token = signToken(user.id);
     const refresh = signRefreshToken(user.id);

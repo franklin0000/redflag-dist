@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { sendMessage, subscribeToMessages, generateNickname } from '../services/chatService';
+import { subscribeToAnonMessages, sendAnonMessage, generateNickname } from '../services/chatService';
 import { uploadChatMedia } from '../services/storageService';
 
 
@@ -14,16 +14,16 @@ export default function ChatRoom() {
     const [messages, setMessages] = useState([]);
     const [inputText, setInputText] = useState('');
     const [myId] = useState(() => {
-        const storedId = sessionStorage.getItem(`chat_id_${room}`);
+        const storedId = localStorage.getItem(`chat_id_${room}`);
         if (storedId) {
             try {
                 return JSON.parse(storedId);
             } catch {
-                sessionStorage.removeItem(`chat_id_${room}`);
+                localStorage.removeItem(`chat_id_${room}`);
             }
         }
         const newId = generateNickname();
-        sessionStorage.setItem(`chat_id_${room}`, JSON.stringify(newId));
+        localStorage.setItem(`chat_id_${room}`, JSON.stringify(newId));
         return newId;
     });
     const [genderVerified, setGenderVerified] = useState(false);
@@ -54,7 +54,7 @@ export default function ChatRoom() {
     };
 
     useEffect(() => {
-        const unsubscribe = subscribeToMessages(room, (newMessages) => {
+        const unsubscribe = subscribeToAnonMessages(room, (newMessages) => {
             setMessages(newMessages);
             scrollToBottom();
         });
@@ -115,7 +115,7 @@ export default function ChatRoom() {
         // Text-only: just send, no need to block UI
         if (!selectedFile) {
             try {
-                await sendMessage(room, text, myId.name, myId.emoji, null);
+                await sendAnonMessage(room, text, myId.name, myId.emoji, null, 'text');
             } catch {
                 toast.error('No se pudo enviar. Intenta de nuevo.');
             }
@@ -140,7 +140,7 @@ export default function ChatRoom() {
         try {
             const url = await uploadChatMedia(file, room);
             const attachment = { url, type: localType, name: 'File-' + Math.floor(Math.random() * 10000) };
-            await sendMessage(room, text, myId.name, myId.emoji, attachment);
+            await sendAnonMessage(room, text, myId.name, myId.emoji, attachment, localType);
         } catch (err) {
             console.error('Send failed:', err);
             toast.error('Error al enviar. Intenta de nuevo.');
@@ -179,7 +179,7 @@ export default function ChatRoom() {
 
                 try {
                     const url = await uploadChatMedia(audioFile, room);
-                    await sendMessage(room, '', myId.name, myId.emoji, { url, type: 'audio' }, 'audio');
+                    await sendAnonMessage(room, '', myId.name, myId.emoji, { url, type: 'audio' }, 'audio');
                 } catch {
                     toast.error('Error al enviar nota de voz.');
                 } finally {
@@ -402,11 +402,10 @@ export default function ChatRoom() {
                     <button
                         type="button"
                         onClick={toggleRecording}
-                        className={`w-11 h-11 rounded-full flex items-center justify-center transition-all active:scale-95 ${
-                            isRecording
+                        className={`w-11 h-11 rounded-full flex items-center justify-center transition-all active:scale-95 ${isRecording
                                 ? 'bg-red-500 text-white scale-110 animate-pulse shadow-lg shadow-red-500/40'
                                 : 'bg-gray-100 dark:bg-white/5 text-gray-500 hover:text-primary'
-                        }`}
+                            }`}
                     >
                         <span className="material-icons text-xl">{isRecording ? 'stop' : 'mic'}</span>
                     </button>

@@ -7,25 +7,7 @@ import {
     getEmergencyNumber,
     isGeolocationSupported,
 } from '../services/locationService';
-import { secureGet, secureSet } from '../services/secureStorage';
-
-// 🔒 Load saved contacts from encrypted storage
-function loadContacts() {
-    // Return default first, then async load will update
-    return [{ name: 'Mom', phone: '555-0123' }];
-}
-
-async function loadContactsAsync() {
-    try {
-        const stored = await secureGet('trusted_contacts');
-        if (stored) return stored;
-    } catch { /* ignore */ }
-    return [{ name: 'Mom', phone: '555-0123' }];
-}
-
-async function saveContacts(contacts) {
-    await secureSet('trusted_contacts', contacts);
-}
+import { contactsApi } from '../services/api';
 
 export default function DateCheckIn() {
     const navigate = useNavigate();
@@ -42,12 +24,24 @@ export default function DateCheckIn() {
     const { state } = useLocation();
     const [meetingProfile, setMeetingProfile] = useState(state?.meetingProfile || null);
 
-    // Contacts (persisted)
-    const [contacts, setContacts] = useState(loadContacts);
+    // Contacts (backed by API + localStorage)
+    const [contacts, setContacts] = useState(() => {
+        const saved = localStorage.getItem('rf_saved_contacts');
+        return saved ? JSON.parse(saved) : [];
+    });
+    const [contactsLoaded, setContactsLoaded] = useState(false);
 
-    // 🔒 Load contacts from encrypted storage on mount
+    // Load contacts from backend on mount
     useEffect(() => {
-        loadContactsAsync().then(stored => setContacts(stored));
+        contactsApi.getAll()
+            .then(data => {
+                if (data && data.length > 0) {
+                    setContacts(data);
+                    localStorage.setItem('rf_saved_contacts', JSON.stringify(data));
+                }
+                setContactsLoaded(true);
+            })
+            .catch(() => { setContactsLoaded(true); }); // fail silently, show empty list
     }, []);
 
     // Location state
@@ -79,10 +73,7 @@ export default function DateCheckIn() {
         isActiveRef.current = isActive;
     }, [isActive]);
 
-    // Save contacts whenever they change
-    useEffect(() => {
-        saveContacts(contacts);
-    }, [contacts]);
+    // No auto-save effect needed — contacts are saved per-action via API
 
     // Detect emergency number when location changes
     useEffect(() => {
@@ -144,13 +135,11 @@ export default function DateCheckIn() {
         fullMessage += `\nTime: ${new Date().toLocaleTimeString()}`;
 
         const encodedMsg = encodeURIComponent(fullMessage);
+        const phones = contacts.filter(c => c.phone).map(c => c.phone.replace(/[^0-9+]/g, ''));
 
-        contacts.forEach(contact => {
-            if (!contact.phone) return;
-            const cleanPhone = contact.phone.replace(/[^0-9+]/g, '');
-            // WhatsApp deep link — opens the app or web.whatsapp.com
-            window.open(`https://wa.me/${cleanPhone}?text=${encodedMsg}`, '_blank');
-        });
+        if (phones.length > 0) {
+            window.location.href = `sms:${phones.join(',')}?body=${encodedMsg}`;
+        }
 
         if (type !== 'SOS ALERT') {
             toast.info(`Alert sent to ${contacts.map(c => c.name).join(', ')}`);
@@ -203,7 +192,7 @@ export default function DateCheckIn() {
             sirenAudio.current.play().catch(() => {
                 const fallback = new Audio('https://cdn.freesound.org/previews/555/555277_6893982-lq.mp3');
                 fallback.loop = true;
-                fallback.play().catch(() => {});
+                fallback.play().catch(() => { });
                 sirenAudio.current = fallback;
             });
         }
@@ -279,23 +268,49 @@ export default function DateCheckIn() {
         return `${h}:${m < 10 ? '0' + m : m}:${s < 10 ? '0' + s : s}`;
     };
 
-    // Contact management
+    // Contact management — backed by API
     const updateContact = (index, field, value) => {
         const updated = [...contacts];
         updated[index] = { ...updated[index], [field]: value };
         setContacts(updated);
+        localStorage.setItem('rf_saved_contacts', JSON.stringify(updated));
+    };
+
+    const handleContactBlur = async (index) => {
+        const c = contacts[index];
+        if (c.name && c.phone) {
+            try {
+                if (c.id) {
+                    await contactsApi.update(c.id, { name: c.name, phone: c.phone });
+                } else {
+                    const saved = await contactsApi.add({ name: c.name, phone: c.phone });
+                    const next = [...contacts];
+                    next[index] = saved;
+                    setContacts(next);
+                    localStorage.setItem('rf_saved_contacts', JSON.stringify(next));
+                }
+            } catch (err) {
+                console.warn('Failed to save contact:', err.message);
+            }
+        }
     };
 
     const addContact = () => {
         if (contacts.length < 3) {
-            setContacts([...contacts, { name: '', phone: '' }]);
+            const next = [...contacts, { name: '', phone: '' }];
+            setContacts(next);
+            localStorage.setItem('rf_saved_contacts', JSON.stringify(next));
         }
     };
 
-    const removeContact = (index) => {
-        if (contacts.length > 1) {
-            setContacts(contacts.filter((_, i) => i !== index));
+    const removeContact = async (index) => {
+        const c = contacts[index];
+        if (c.id) {
+            try { await contactsApi.remove(c.id); } catch (err) { console.warn('Failed to delete contact:', err); }
         }
+        const next = contacts.filter((_, i) => i !== index);
+        setContacts(next);
+        localStorage.setItem('rf_saved_contacts', JSON.stringify(next));
     };
 
     // Share location manually
@@ -370,11 +385,11 @@ export default function DateCheckIn() {
 
                         {contacts.length > 0 && (
                             <a
-                                href={`sms:${contacts[0].phone}?body=${encodeURIComponent(`🚨 HELP! I am in danger! My location: ${location ? getGoogleMapsLink(location.lat, location.lng) : 'Unknown'}`)}`}
+                                href={`sms:${contacts.filter(c => c.phone).map(c => c.phone.replace(/[^0-9+]/g, '')).join(',')}?body=${encodeURIComponent(`🚨 HELP! I am in danger! My location: ${location ? getGoogleMapsLink(location.lat, location.lng) : 'Unknown'}`)}`}
                                 className="bg-red-800 text-white px-6 py-4 rounded-xl font-bold text-lg flex items-center justify-center gap-3 border border-red-400/30 hover:bg-red-700"
                             >
                                 <span className="material-icons">send</span>
-                                Text {contacts[0].name}
+                                Text All Contacts
                             </a>
                         )}
 
@@ -565,6 +580,7 @@ export default function DateCheckIn() {
                                                     type="text"
                                                     value={contact.name}
                                                     onChange={(e) => updateContact(idx, 'name', e.target.value)}
+                                                    onBlur={() => handleContactBlur(idx)}
                                                     placeholder="Name (e.g. Mom)"
                                                     className="w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-white text-sm focus:border-purple-500 focus:outline-none"
                                                 />
@@ -572,6 +588,7 @@ export default function DateCheckIn() {
                                                     type="tel"
                                                     value={contact.phone}
                                                     onChange={(e) => updateContact(idx, 'phone', e.target.value)}
+                                                    onBlur={() => handleContactBlur(idx)}
                                                     placeholder="Phone Number"
                                                     className="w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-white text-sm focus:border-purple-500 focus:outline-none"
                                                 />

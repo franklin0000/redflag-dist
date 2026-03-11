@@ -1,6 +1,33 @@
 const router = require('express').Router();
 const db = require('../db');
 const { requireAuth } = require('../middleware/auth');
+const { spawn } = require('child_process');
+const path = require('path');
+const upload = require('../middleware/upload');
+
+// POST /api/searches/background-check
+router.post('/background-check', requireAuth, upload.single('file'), (req, res) => {
+  const imagePath = req.file ? req.file.path : 'none';
+  const usernameQuery = req.body.username || 'undefined';
+
+  const scriptPath = path.join(__dirname, '..', 'python', 'background_check.py');
+
+  const py = spawn('python3', [scriptPath, imagePath, usernameQuery]);
+  let output = '';
+  let errorOutput = '';
+
+  py.stdout.on('data', (data) => { output += data.toString(); });
+  py.stderr.on('data', (data) => { errorOutput += data.toString(); });
+
+  py.on('close', (code) => {
+    try {
+      const parsed = JSON.parse(output);
+      res.json(parsed);
+    } catch (e) {
+      res.status(500).json({ error: 'Failed to parse python output', details: errorOutput || output });
+    }
+  });
+});
 
 // GET /api/searches — user search history
 router.get('/', requireAuth, async (req, res) => {

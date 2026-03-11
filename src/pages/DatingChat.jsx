@@ -98,7 +98,7 @@ export default function DatingChat() {
         const toastId = toast.loading("Uploading...");
         try {
             const url = await uploadChatAttachment(file);
-            await sendMessage(matchId, '', user?.name || 'User', '👤', url, type);
+            await sendMessage(matchId, url || '');
             toast.dismiss(toastId);
             toast.success("Sent!");
             // Remove optimistic, real message comes via subscription
@@ -158,7 +158,7 @@ export default function DatingChat() {
                 const toastId = toast.loading("Sending voice message...");
                 try {
                     const url = await uploadChatAttachment(audioFile);
-                    await sendMessage(matchId, '', user?.name || 'User', '👤', url, 'audio');
+                    await sendMessage(matchId, url || '');
                     toast.dismiss(toastId);
                     toast.success("Sent!");
                     setMessages(prev => prev.filter(m => m.id !== optimisticMsg.id));
@@ -407,7 +407,7 @@ export default function DatingChat() {
         setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
 
         try {
-            await sendMessage(matchId, text, user.name || 'User', '👤', null);
+            await sendMessage(matchId, text);
             // Non-blocking update to matches for last_message preview
             supabase.from('matches')
                 .update({ last_message: text, last_message_time: new Date().toISOString() })
@@ -442,7 +442,7 @@ export default function DatingChat() {
             const content = `[sticker:${encodeURIComponent(emojiData.svg)}]`;
 
             try {
-                await sendMessage(matchId, content, user.name || 'User', '👤', 'sticker'); // type = sticker
+                await sendMessage(matchId, content);
             } catch (error) {
                 console.error("Error sending sticker:", error);
             }

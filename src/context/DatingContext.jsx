@@ -19,6 +19,24 @@ export const DatingProvider = ({ children }) => {
     const [loading, setLoading] = useState(true);
     const fetchedOnce = useRef(false);
 
+    // ── Dating Mode JS Toggle / Persist ──────────────────────────
+    const [isDatingMode, setIsDatingMode] = useState(() => {
+        return localStorage.getItem('rf_dating_mode') === 'true';
+    });
+
+    useEffect(() => {
+        if (isDatingMode) {
+            document.documentElement.setAttribute('data-theme', 'dating');
+        } else {
+            document.documentElement.removeAttribute('data-theme');
+        }
+        localStorage.setItem('rf_dating_mode', isDatingMode);
+    }, [isDatingMode]);
+
+    const toggleMode = useCallback(() => {
+        setIsDatingMode(prev => !prev);
+    }, []);
+
     // ── Load dating profile on login ──────────────────────────────
     useEffect(() => {
         if (!user) {
@@ -104,7 +122,7 @@ export const DatingProvider = ({ children }) => {
         ts[matchId] = new Date().toISOString();
         localStorage.setItem(UNREAD_KEY, JSON.stringify(ts));
         // Also mark in DB
-        datingApi.markRead(matchId).catch(() => {});
+        datingApi.markRead(matchId).catch(() => { });
         // Update local unread count
         setMatches(prev => prev.map(m =>
             m.match_id === matchId ? { ...m, unread: 0 } : m
@@ -113,6 +131,8 @@ export const DatingProvider = ({ children }) => {
 
     return (
         <DatingContext.Provider value={{
+            isDatingMode,
+            toggleMode,
             loading,
             datingProfile,
             potentialMatches,

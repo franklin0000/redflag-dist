@@ -4,7 +4,7 @@ const multer = require('multer');
 const { performStealthScan } = require('./scraper');
 
 const app = express();
-const port = 3001;
+const port = 3002;
 
 // Middleware
 app.use(cors());

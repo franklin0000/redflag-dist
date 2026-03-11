@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 // eslint-disable-next-line no-unused-vars
 import { motion } from 'framer-motion';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -137,11 +137,7 @@ export default function DatePlanner() {
         try {
             await sendMessage(
                 matchId,
-                `[date_invite] Let's meet at ${confirmingPlace.name}!📍 ${confirmingPlace.address}`,
-                user?.name || 'User',
-                '👤',
-                null,
-                'date_invite'
+                `[date_invite] Let's meet at ${confirmingPlace.name}!📍 ${confirmingPlace.address}`
             );
             toast.success(`Invite to ${confirmingPlace.name} sent to ${match.name}!`);
         } catch (err) {
@@ -171,11 +167,7 @@ export default function DatePlanner() {
         try {
             await sendMessage(
                 matchId,
-                `[live_location_invite] I'm sharing my live location with you for our date!`,
-                user?.name || 'User',
-                '👤',
-                null,
-                'live_location'
+                `[live_location_invite] I'm sharing my live location with you for our date!`
             );
             toast.success(`Started Live Radar with ${match.name}!`);
             navigate(`/dating/live-radar/${matchId}`);
@@ -199,11 +191,7 @@ export default function DatePlanner() {
 
             await sendMessage(
                 matchId,
-                `[saferide_invite:${sessionId}] I've ordered a SafeRide for you to get to ${confirmingPlace.name}!`,
-                user?.name || 'User',
-                '👤',
-                null,
-                'saferide'
+                `[saferide_invite:${sessionId}] I've ordered a SafeRide for you to get to ${confirmingPlace.name}!`
             );
             toast.success(`SafeRide Sent!`);
             navigate(`/dating/saferide/${sessionId}`);

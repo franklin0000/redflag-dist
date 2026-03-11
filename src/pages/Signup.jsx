@@ -26,7 +26,7 @@ export default function Signup() {
         setIsSubmitting(true);
         setError('');
         try {
-            await signup(email, password, name);
+            await signup(email, password, name, gender);
             toast.success('Account created!');
             navigate('/');
         } catch (err) {

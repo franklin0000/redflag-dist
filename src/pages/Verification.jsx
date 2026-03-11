@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { supabase } from '../services/supabase';
+import { usersApi } from '../services/api';
 import { useToast } from '../context/ToastContext';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
@@ -28,7 +28,7 @@ async function analyzeSelfieFace(base64DataUrl) {
 }
 
 export default function Verification() {
-    const { user, refreshProfile } = useAuth();
+    const { user, refreshUser } = useAuth();
     const navigate = useNavigate();
     const toast = useToast();
 
@@ -124,16 +124,10 @@ export default function Verification() {
 
     const completeVerification = async (verifiedGender) => {
         try {
-            // Update DB — only columns that exist in users schema
-            const { error } = await supabase
-                .from('users')
-                .update({ is_verified: true })
-                .eq('id', user.id);
-
-            if (error) console.warn('DB update warning:', error);
+            await usersApi.verifyIdentity(verifiedGender);
 
             // Re-sync local auth state from DB
-            await refreshProfile();
+            if (refreshUser) await refreshUser();
 
             setStep(3);
             toast.success("¡Identidad Confirmada!");

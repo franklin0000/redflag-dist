@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, addMonths, subMonths } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { supabase } from '../services/supabase';
+import { datingApi } from '../services/api';
 
 export default function DateCalendar() {
     const navigate = useNavigate();
@@ -14,38 +14,30 @@ export default function DateCalendar() {
         if (!user) return;
         const fetchDates = async () => {
             try {
-                const { data, error } = await supabase
-                    .from('messages')
-                    .select('*')
-                    .eq('type', 'date_invite')
-                    .order('created_at', { ascending: false });
-
-                if (error) throw error;
-
-                if (data) {
-                    const parsedEvents = data.map(msg => {
-                        // Parse: "[date_invite] Let's meet at {Place Name}!📍 {Address}"
-                        const match = msg.content.match(/Let's meet at (.+)!📍 (.+)/);
+                // Fetch matches and parse date_invite messages from last_message field
+                const matches = await datingApi.getMatches().catch(() => []);
+                const parsedEvents = [];
+                for (const m of matches) {
+                    if (m.last_message?.includes('[date_invite]')) {
+                        const content = m.last_message;
+                        const match = content.match(/Let's meet at (.+)!📍 (.+)/);
                         const placeName = match ? match[1] : 'Unknown Place';
                         const address = match ? match[2] : '';
-
-                        // Default to the next day at 7:00 PM (same logic as DatePlanner)
-                        const eventDate = new Date(msg.created_at);
+                        const eventDate = new Date(m.last_message_at || m.updated_at || Date.now());
                         eventDate.setDate(eventDate.getDate() + 1);
                         eventDate.setHours(19, 0, 0, 0);
-
-                        return {
-                            id: msg.id,
+                        parsedEvents.push({
+                            id: m.id,
                             date: eventDate,
                             title: `Date at ${placeName}`,
                             location: address,
-                            type: placeName.toLowerCase().includes('coffee') || placeName.toLowerCase().includes('cafe') ? 'coffee' : 'dinner'
-                        };
-                    });
-                    setEvents(parsedEvents);
+                            type: placeName.toLowerCase().includes('coffee') || placeName.toLowerCase().includes('cafe') ? 'coffee' : 'dinner',
+                        });
+                    }
                 }
+                setEvents(parsedEvents);
             } catch (err) {
-                console.error("Error fetching dates:", err);
+                console.error('Error fetching dates:', err);
             }
         };
         fetchDates();

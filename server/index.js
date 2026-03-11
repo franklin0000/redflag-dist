@@ -11,7 +11,7 @@ const app = express();
 const server = http.createServer(app);
 const ALLOWED_ORIGIN = process.env.FRONTEND_URL || 'https://redflag-source.onrender.com';
 const io = new SocketIO(server, {
-  cors: { origin: [ALLOWED_ORIGIN, 'http://localhost:5173'], methods: ['GET','POST'] },
+  cors: { origin: [ALLOWED_ORIGIN, 'http://localhost:5173'], methods: ['GET', 'POST'] },
 });
 
 const PORT = process.env.PORT || 3001;
@@ -68,16 +68,19 @@ app.post('/api/search', (req, res) => {
 });
 
 // ── API Routes ────────────────────────────────────────────────
-app.use('/api/auth',          require('./routes/auth'));
-app.use('/api/users',         require('./routes/users'));
-app.use('/api/dating',        require('./routes/dating'));
-app.use('/api/posts',         require('./routes/posts'));
-app.use('/api/reports',       require('./routes/reports'));
+app.use('/api/auth', require('./routes/auth'));
+app.use('/api/users', require('./routes/users'));
+app.use('/api/dating', require('./routes/dating'));
+app.use('/api/posts', require('./routes/posts'));
+app.use('/api/reports', require('./routes/reports'));
 app.use('/api/notifications', require('./routes/notifications'));
-app.use('/api/searches',      require('./routes/searches'));
-app.use('/api/stats',         require('./routes/stats'));
+app.use('/api/searches', require('./routes/searches'));
+app.use('/api/stats', require('./routes/stats'));
 const locationFlagsRouter = require('./routes/locationFlags');
 app.use('/api/location-flags', locationFlagsRouter);
+app.use('/api/contacts', require('./routes/contacts'));
+const guardianRouter = require('./routes/guardian');
+app.use('/api/guardian', guardianRouter);
 
 // ── File Upload (any route) ───────────────────────────────────
 const upload = require('./middleware/upload');
@@ -142,6 +145,20 @@ app.post('/api/sumsub-token', require('./middleware/auth').requireAuth, async (r
 // ── Socket.io — Real-time Chat ────────────────────────────────
 const onlineUsers = new Map(); // userId -> socketId
 
+// Anonymous chat state (in-memory, expires in 24h)
+const anonRooms = {
+  women: [],
+  men: []
+};
+
+// Housekeeping every hour
+setInterval(() => {
+  const now = Date.now();
+  ['women', 'men'].forEach(r => {
+    anonRooms[r] = (anonRooms[r] || []).filter(m => (now - new Date(m.timestamp).getTime()) < 24 * 60 * 60 * 1000);
+  });
+}, 60 * 60 * 1000);
+
 io.use(async (socket, next) => {
   try {
     const token = socket.handshake.auth.token;
@@ -157,6 +174,7 @@ io.use(async (socket, next) => {
 });
 
 locationFlagsRouter.setIo(io);
+guardianRouter.setIo(io);
 
 io.on('connection', (socket) => {
   const userId = socket.user.id;
@@ -220,6 +238,29 @@ io.on('connection', (socket) => {
     } catch (err) {
       console.error('send_message error:', err.message);
     }
+  });
+
+  // Anonymous Chat Handlers
+  socket.on('join_anon', (room) => {
+    socket.join(`anon:${room}`);
+    socket.emit('anon_history', anonRooms[room] || []);
+  });
+
+  socket.on('send_anon_message', (msg) => {
+    const { room, text, nickname, avatar, attachment, type } = msg;
+    const message = {
+      id: crypto.randomUUID(),
+      text, nickname, avatar, attachment, type,
+      timestamp: new Date().toISOString()
+    };
+    if (!anonRooms[room]) anonRooms[room] = [];
+    anonRooms[room].push(message);
+    io.to(`anon:${room}`).emit('new_anon_message', message);
+  });
+
+  // Guardian session room — join to receive real-time updates
+  socket.on('join_guardian', (token) => {
+    socket.join(`guardian:${token}`);
   });
 
   // Typing indicator

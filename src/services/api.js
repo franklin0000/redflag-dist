@@ -86,10 +86,10 @@ async function tryRefresh() {
 
 // ── AUTH ──────────────────────────────────────────────────────
 export const authApi = {
-  register: (email, password, name) =>
+  register: (email, password, name, gender) =>
     request('/api/auth/register', {
       method: 'POST',
-      body: JSON.stringify({ email, password, name }),
+      body: JSON.stringify({ email, password, name, gender }),
     }),
 
   login: async (email, password) => {
@@ -126,6 +126,7 @@ export const authApi = {
 export const usersApi = {
   getUser: (id) => request(`/api/users/${id}`),
   updateMe: (data) => request('/api/users/me', { method: 'PATCH', body: JSON.stringify(data) }),
+  verifyIdentity: (gender) => request('/api/users/me/verify', { method: 'POST', body: JSON.stringify({ gender }) }),
   updateSubscription: (isPaid) =>
     request('/api/users/me/subscription', {
       method: 'PATCH',
@@ -255,6 +256,27 @@ export const userExtras = {
   getMuteStatus: (matchId) => request(`/api/users/mute/${matchId}`),
   muteChat: (matchId) => request(`/api/users/mute/${matchId}`, { method: 'POST' }),
   unmuteChat: (matchId) => request(`/api/users/mute/${matchId}`, { method: 'DELETE' }),
+};
+
+// ── TRUSTED CONTACTS ──────────────────────────────────────────
+export const contactsApi = {
+  getAll: () => request('/api/contacts'),
+  add: (data) => request('/api/contacts', { method: 'POST', body: JSON.stringify(data) }),
+  update: (id, data) => request(`/api/contacts/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  remove: (id) => request(`/api/contacts/${id}`, { method: 'DELETE' }),
+};
+
+// ── GUARDIAN SESSIONS ──────────────────────────────────────────
+export const guardianApi = {
+  create: (data) => request('/api/guardian/sessions', { method: 'POST', body: JSON.stringify(data) }),
+  getMine: () => request('/api/guardian/sessions/mine'),
+  getById: (id) => request(`/api/guardian/sessions/${id}`),
+  viewByToken: (token) => request(`/api/guardian/view/${token}`),
+  updateLocation: (id, lat, lng) => request(`/api/guardian/sessions/${id}/location`, { method: 'PATCH', body: JSON.stringify({ lat, lng }) }),
+  checkIn: (id) => request(`/api/guardian/sessions/${id}/checkin`, { method: 'POST' }),
+  triggerSOS: (id, location) => request(`/api/guardian/sessions/${id}/sos`, { method: 'POST', body: JSON.stringify({ location }) }),
+  cancelSOS: (id) => request(`/api/guardian/sessions/${id}/sos/cancel`, { method: 'POST' }),
+  end: (id) => request(`/api/guardian/sessions/${id}/end`, { method: 'POST' }),
 };
 
 // ── FILE UPLOAD (generic) ─────────────────────────────────────
