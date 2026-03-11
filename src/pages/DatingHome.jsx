@@ -106,11 +106,11 @@ export default function DatingHome() {
             <div className="flex gap-2">
                 <button
                     onClick={toggleMode}
-                    className={`p-2 rounded-full transition-colors flex items-center justify-center ${isDatingMode ? 'bg-pink-600 text-white shadow-[0_0_15px_rgba(219,39,119,0.5)]' : 'bg-black/40 text-gray-400 hover:text-white border border-gray-600/30'}`}
+                    className={`p-2 rounded-full transition-all flex items-center justify-center ${isDatingMode ? 'bg-dating-accent text-white animate-glow' : 'bg-black/40 text-gray-400 hover:text-white border border-gray-600/30'}`}
                     title={isDatingMode ? 'Dating Mode ON' : 'Dating Mode OFF'}
                     aria-label="Toggle Dating Mode"
                 >
-                    <span className="material-icons text-sm">{isDatingMode ? 'favorite' : 'favorite_border'}</span>
+                    <span className={`material-icons text-sm ${isDatingMode ? 'animate-heart-pulse' : ''}`}>{isDatingMode ? 'favorite' : 'favorite_border'}</span>
                 </button>
                 <button
                     onClick={() => {
