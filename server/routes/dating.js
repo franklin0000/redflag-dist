@@ -124,7 +124,7 @@ router.post('/swipe', requireAuth, async (req, res) => {
         const [u1, u2] = [req.user.id, target_id].sort();
         await db.query(
           `INSERT INTO matches (user1_id, user2_id)
-           VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+           VALUES ($1, $2) ON CONFLICT (user1_id, user2_id) DO NOTHING`,
           [u1, u2]
         );
         isMatch = true;

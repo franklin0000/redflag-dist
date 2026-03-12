@@ -34,20 +34,48 @@ test.describe('RedFlag Full Test Suite', () => {
     let token = null;
 
     test.beforeAll(async ({ request }) => {
-        // Register or fall back to login
+        // Wake up Render free tier (may be sleeping)
+        for (let i = 0; i < 6; i++) {
+            try {
+                const ping = await request.get('/api/stats/community');
+                if (ping.status() === 200) { console.log('Server awake ✓'); break; }
+            } catch {}
+            console.log(`Waiting for server... attempt ${i + 1}`);
+            await new Promise(r => setTimeout(r, 8000));
+        }
+
+        // Try register first
         const regRes = await request.post('/api/auth/register', {
             data: { email: testUser.email, password: testUser.password, name: testUser.name, gender: testUser.gender }
         });
         if (regRes.status() === 201) {
-            token = (await regRes.json()).token;
-            console.log('beforeAll: registered, token acquired');
-        } else {
+            const body = await regRes.json();
+            token = body.token;
+            console.log('beforeAll: registered, token:', token ? 'ok' : 'missing', 'body keys:', Object.keys(body));
+        }
+
+        // If not registered (already exists or server error), try login
+        if (!token) {
             const loginRes = await request.post('/api/auth/login', {
                 data: { email: testUser.email, password: testUser.password }
             });
-            token = (await loginRes.json()).token;
-            console.log('beforeAll: existing user login, token acquired');
+            const loginBody = await loginRes.json().catch(() => ({}));
+            token = loginBody.token || null;
+            console.log('beforeAll: login status:', loginRes.status(), 'token:', token ? 'ok' : 'missing', 'body:', JSON.stringify(loginBody).substring(0, 100));
         }
+
+        // Last resort: delete and re-register with timestamp email
+        if (!token) {
+            const email2 = `pw_${Date.now()}@redflag.test`;
+            const reg2 = await request.post('/api/auth/register', {
+                data: { email: email2, password: testUser.password, name: testUser.name, gender: testUser.gender }
+            });
+            const body2 = await reg2.json().catch(() => ({}));
+            token = body2.token || null;
+            if (token) testUser.email = email2;
+            console.log('beforeAll: fallback register status:', reg2.status(), 'token:', token ? 'ok' : 'missing');
+        }
+
         expect(token).toBeTruthy();
     });
 

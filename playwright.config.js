@@ -4,13 +4,14 @@ export default defineConfig({
     testDir: './tests',
     fullyParallel: false,
     forbidOnly: !!process.env.CI,
-    retries: 2,
+    retries: 0,
     workers: 1,
-    reporter: [['list'], ['html', { outputFolder: 'playwright-report', open: 'never' }]],
+    timeout: 120000,       // 2 min per test (covers Render free-tier warm-up in beforeAll)
+    globalTimeout: 600000, // 10 min total
+    reporter: 'list',
     use: {
         baseURL: 'https://redflag-source.onrender.com',
-        trace: 'retain-on-failure',
-        screenshot: 'only-on-failure',
+        trace: 'off',
         video: 'off',
         actionTimeout: 15000,
         navigationTimeout: 30000,

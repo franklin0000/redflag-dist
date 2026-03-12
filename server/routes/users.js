@@ -7,9 +7,12 @@ const upload = require('../middleware/upload');
 router.get('/me', requireAuth, async (req, res) => {
   try {
     const { rows } = await db.query(
-      `SELECT id, name, username, avatar_url, bio, is_paid, is_verified,
-              is_verified_web3, safety_score, location, created_at, last_seen, settings
-       FROM users WHERE id = $1`,
+      `SELECT u.id, u.name, u.username, u.avatar_url, u.bio, u.is_paid, u.is_verified,
+              u.is_verified_web3, u.safety_score, u.location, u.created_at, u.last_seen, u.settings,
+              dp.gender
+       FROM users u
+       LEFT JOIN dating_profiles dp ON dp.user_id = u.id
+       WHERE u.id = $1`,
       [req.user.id]
     );
     if (!rows.length) return res.status(404).json({ error: 'User not found' });

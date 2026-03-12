@@ -12,6 +12,18 @@
   --color-background-dark: #22101f;
   --color-surface-dark: #2d1b2a;
 
+  --color-pink-50: #fdf2fa;
+  --color-pink-100: #fbe5f6;
+  --color-pink-200: #f8cced;
+  --color-pink-300: #f2a6de;
+  --color-pink-400: #ea72c9;
+  --color-pink-500: #d411b4;
+  --color-pink-600: #b80c98;
+  --color-pink-700: #98087b;
+  --color-pink-800: #7e0a66;
+  --color-pink-900: #680d55;
+  --color-pink-950: #410232;
+
   --font-display: "Inter", sans-serif;
 
   --radius-lg: 0.5rem;
@@ -39,21 +51,28 @@
   }
 
   @keyframes glow {
-    0%, 100% {
+
+    0%,
+    100% {
       box-shadow: 0 0 8px 2px rgba(255, 51, 102, 0.4);
     }
+
     50% {
       box-shadow: 0 0 24px 8px rgba(255, 105, 180, 0.7);
     }
   }
 
   @keyframes heart-pulse {
-    0%, 100% {
+
+    0%,
+    100% {
       transform: scale(1);
     }
+
     40% {
       transform: scale(1.18);
     }
+
     60% {
       transform: scale(1.08);
     }

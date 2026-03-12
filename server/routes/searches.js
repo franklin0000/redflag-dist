@@ -8,7 +8,7 @@ const upload = require('../middleware/upload');
 // POST /api/searches/background-check
 router.post('/background-check', requireAuth, upload.single('file'), (req, res) => {
   const imagePath = req.file ? req.file.path : 'none';
-  const usernameQuery = req.body.username || 'undefined';
+  const usernameQuery = req.body.username || '';
 
   const scriptPath = path.join(__dirname, '..', 'python', 'background_check.py');
 

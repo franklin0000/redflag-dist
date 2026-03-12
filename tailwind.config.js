@@ -11,13 +11,26 @@ export default {
     extend: {
       colors: {
         "primary": "#d411b4",
+        "pink": {
+          50: '#fdf2fa',
+          100: '#fbe5f6',
+          200: '#f8cced',
+          300: '#f2a6de',
+          400: '#ea72c9',
+          500: '#d411b4',  // The exact primary color from the screenshots
+          600: '#b80c98',
+          700: '#98087b',
+          800: '#7e0a66',
+          900: '#680d55',
+          950: '#410232',
+        },
         "background-light": "#f8f6f8",
         "background-dark": "#22101f",
         "dating-bg": "#1a0d2e",
         "dating-mid": "#2d1b47",
         "dating-accent": "#ff3366",
         "dating-fire": "#ff4d4d",
-        "dating-glow": "#ff69b4",
+        "dating-glow": "#d411b4", // Also match glow to primary
       },
       fontFamily: {
         "display": ["Inter", "sans-serif"]
