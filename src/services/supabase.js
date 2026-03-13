@@ -282,11 +282,12 @@ class QueryBuilder {
     switch (op) {
       case 'select': {
         const userId = f.user_id;
+        const roomId = f.room_id;
         const limit = this._limit || 20;
-        const url = userId
-          ? `/api/posts?limit=${limit}&user_id=${userId}`
-          : `/api/posts?limit=${limit}`;
-        return apiRequest(url);
+        const params = new URLSearchParams({ limit });
+        if (userId) params.set('user_id', userId);
+        if (roomId) params.set('room_id', roomId);
+        return apiRequest(`/api/posts?${params}`);
       }
       case 'insert': {
         return apiRequest('/api/posts', {

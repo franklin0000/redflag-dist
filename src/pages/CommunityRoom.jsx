@@ -81,9 +81,9 @@ export default function CommunityRoom() {
             return {
                 id: p.id,
                 userId: p.user_id,
-                username: p.user?.name || 'Anonymous',
-                userAvatar: p.user?.photo_url || null,
-                initials: (p.user?.name || 'AN').substring(0, 2).toUpperCase(),
+                username: p.user?.name || p.name || 'Anonymous',
+                userAvatar: p.user?.photo_url || p.avatar_url || null,
+                initials: (p.user?.name || p.name || 'AN').substring(0, 2).toUpperCase(),
                 content: p.content || '',
                 mediaUrl: p.media_url || null,
                 mediaType: p.media_type || null,
