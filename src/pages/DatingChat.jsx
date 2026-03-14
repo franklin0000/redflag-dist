@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useDating } from '../context/DatingContext';
 import { useToast } from '../context/ToastContext';
@@ -21,6 +21,7 @@ export default function DatingChat() {
     const { user } = useAuth();
     const { matches, markMatchRead } = useDating();
     const navigate = useNavigate();
+    const location = useLocation();
     const toast = useToast();
 
     // Derived Match ID — must be defined before any handler that uses it
@@ -33,10 +34,10 @@ export default function DatingChat() {
     const [input, setInput] = useState('');
     const [showFeedback, setShowFeedback] = useState(false);
 
-    // Call State
+    // Call State — pre-populate from GlobalCallHandler navigation state if present
     const [isInCall, setIsInCall] = useState(false);
     const [activeCallType, setActiveCallType] = useState('video'); // 'video' or 'audio'
-    const [incomingCall, setIncomingCall] = useState(null);
+    const [incomingCall, setIncomingCall] = useState(location.state?.autoAnswerCall ?? null);
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
     const [participants, setParticipants] = useState([]);
 

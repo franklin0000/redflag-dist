@@ -48,6 +48,7 @@ import { DatingProvider } from './context/DatingContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import PremiumGate from './components/PremiumGate';
 import ErrorBoundary from './components/ErrorBoundary';
+import GlobalCallHandler from './components/GlobalCallHandler';
 
 // Loading fallback for lazy-loaded pages
 function PageLoader() {
@@ -89,6 +90,7 @@ function App() {
     <ErrorBoundary>
       <ToastProvider>
         <AuthProvider>
+          <GlobalCallHandler />
           <DatingProvider>
             <Suspense fallback={<PageLoader />}>
               <AnimatePresence mode="wait">

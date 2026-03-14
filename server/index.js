@@ -209,6 +209,7 @@ require('./ioRef').setIO(io);
 io.on('connection', (socket) => {
   const userId = socket.user.id;
   onlineUsers.set(userId, socket.id);
+  socket.join(`user:${userId}`); // Personal room for direct delivery (e.g. incoming calls)
   console.log(`User ${socket.user.name} connected`);
 
   // Join match rooms
@@ -336,8 +337,27 @@ io.on('connection', (socket) => {
 
   // WebRTC call signaling — matchId must be included in payload so receivers can filter
   socket.on('call:signal', async ({ matchId: rawMatchId, signal, from, type, callType }) => {
+    console.log('[Socket] call:signal received:', { rawMatchId, from, type, callType });
     const matchId = await resolveMatchId(rawMatchId);
+    console.log('[Socket] Resolved matchId:', matchId);
     socket.to(`match:${matchId}`).emit('call:signal', { matchId: rawMatchId, signal, from, type, callType });
+
+    // For call offers, also deliver directly to partner's personal room so they
+    // receive it even if they haven't joined the match room (i.e. chat not open).
+    if (type === 'offer') {
+      try {
+        const { rows } = await db.query(
+          'SELECT user1_id, user2_id FROM matches WHERE id=$1',
+          [matchId]
+        );
+        if (rows.length) {
+          const partnerId = rows[0].user1_id === userId ? rows[0].user2_id : rows[0].user1_id;
+          io.to(`user:${partnerId}`).emit('call:signal', { matchId: rawMatchId, signal, from, type, callType });
+        }
+      } catch (err) {
+        console.error('[Socket] call:signal direct delivery error:', err.message);
+      }
+    }
   });
 
   socket.on('call:end', async ({ matchId: rawMatchId }) => {
