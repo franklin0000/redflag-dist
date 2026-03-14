@@ -79,8 +79,12 @@ app.use('/api/stats', require('./routes/stats'));
 const locationFlagsRouter = require('./routes/locationFlags');
 app.use('/api/location-flags', locationFlagsRouter);
 app.use('/api/contacts', require('./routes/contacts'));
+app.use('/api/emojis', require('./routes/emojis'));
 const guardianRouter = require('./routes/guardian');
 app.use('/api/guardian', guardianRouter);
+const safetyRouter = require('./routes/safety');
+app.use('/api/safety', safetyRouter);
+app.use('/api/twilio', require('./routes/twilio'));
 
 // ── File Upload (any route) ───────────────────────────────────
 const upload = require('./middleware/upload');
@@ -287,6 +291,14 @@ io.on('connection', (socket) => {
   // Live Radar — location sharing
   socket.on('location:update', ({ matchId, lat, lng }) => {
     socket.to(`match:${matchId}`).emit('location:update', { userId, lat, lng });
+  });
+
+  // LiveDateRadar — radar rooms
+  socket.on('join_radar', (matchId) => {
+    if (matchId) socket.join(`radar:${matchId}`);
+  });
+  socket.on('radar:update', ({ userId: uid, matchId, lat, lng }) => {
+    socket.to(`radar:${matchId}`).emit('radar:location', { userId: uid || userId, lat, lng });
   });
 
   // Community Rooms — real-time post broadcast

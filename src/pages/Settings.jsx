@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { userExtras, authExtras, usersApi, getToken } from '../services/api';
+import { userExtras, authExtras, getToken } from '../services/api';
 import { secureRemove } from '../services/secureStorage';
 
 // ── Reusable Modal ──────────────────────────────────────────────────────────
@@ -53,11 +53,13 @@ export default function Settings() {
     // 2FA flow states
     const [twoFAModal, setTwoFAModal] = useState(false);
     const [twoFAStep, setTwoFAStep] = useState('idle'); // idle | enrolling | scan | verifying | success | unenroll
+    // eslint-disable-next-line no-unused-vars
     const [totpQR, setTotpQR] = useState('');
+    // eslint-disable-next-line no-unused-vars
     const [totpSecret, setTotpSecret] = useState('');
     const [totpCode, setTotpCode] = useState('');
-    const [totpFactorId, setTotpFactorId] = useState('');
     const [twoFAError, setTwoFAError] = useState('');
+    // eslint-disable-next-line no-unused-vars
     const [twoFALoading, setTwoFALoading] = useState(false);
 
     // ── Load settings from Express API ──────────────────────────────────────

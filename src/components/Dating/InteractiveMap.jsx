@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import Map, { Marker, Layer, NavigationControl } from 'react-map-gl/mapbox';
 // eslint-disable-next-line no-unused-vars
 import { AnimatePresence, motion } from 'framer-motion';
-import { supabase } from '../../services/supabase';
+import { locationFlagsApi } from '../../services/api';
 import 'mapbox-gl/dist/mapbox-gl.css';
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
@@ -101,12 +101,12 @@ export default function InteractiveMap({ center, places, onPlaceSelect }) {
 
     // Load community flags (read-only overlay)
     useEffect(() => {
-        supabase
-            .from('location_flags')
-            .select('id, lat, lng, flag_type, place_name')
-            .limit(80)
-            .then(({ data }) => setCommunityFlags(data || []));
-    }, []);
+        const lat = center?.lat || 40.7128;
+        const lng = center?.lng || -74.0060;
+        locationFlagsApi.getAll(lat, lng, 50)
+            .then((data) => setCommunityFlags(data || []))
+            .catch(() => setCommunityFlags([]));
+    }, [center?.lat, center?.lng]);
 
     const visible = activeCategory === 'all'
         ? places

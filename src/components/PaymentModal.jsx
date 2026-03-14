@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { usersApi } from '../services/api';
 import { ConnectKitButton } from 'connectkit';
@@ -12,7 +11,6 @@ const FALLBACK_ADDRESS = import.meta.env.VITE_DONATION_ADDRESS || "0xFE301CEa21E
 
 // eslint-disable-next-line no-unused-vars
 export default function PaymentModal({ featureName, onClose }) {
-    const { user } = useAuth();
     const toast = useToast();
     const { isConnected } = useAccount();
     const [selectedAmount, setSelectedAmount] = useState(5);

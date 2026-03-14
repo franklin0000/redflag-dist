@@ -1,10 +1,61 @@
 /**
- * notificationService.js — Notification CRUD via Express API
+ * notificationService.js — Notification CRUD via Express API + Web Push
  */
 import { notificationsApi } from './api';
 
+let subscription = null;
+
 /**
- * Subscribe to notifications (poll-based since we don't have Supabase realtime)
+ * Request permission and subscribe to push notifications
+ */
+export const requestPushPermission = async () => {
+    if (!('Notification' in window)) {
+        console.warn('Push notifications not supported');
+        return null;
+    }
+
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') {
+        console.warn('Push permission denied');
+        return null;
+    }
+
+    // Register service worker
+    const registration = await navigator.serviceWorker.register('/sw.js');
+    
+    // Subscribe to push
+    const vapidPublic = import.meta.env.VITE_VAPID_PUBLIC_KEY;
+    
+    subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: vapidPublic ? urlBase64ToUint8Array(vapidPublic) : null,
+    });
+
+    // Save subscription to server
+    try {
+        await notificationsApi.subscribePush(JSON.stringify(subscription));
+    } catch (err) {
+        console.warn('Failed to save push subscription:', err);
+    }
+
+    return subscription;
+};
+
+/**
+ * Show local notification
+ */
+export const showLocalNotification = (title, options = {}) => {
+    if (Notification.permission === 'granted') {
+        new Notification(title, {
+            icon: '/icons/icon-192.png',
+            badge: '/icons/icon-192.png',
+            ...options,
+        });
+    }
+};
+
+/**
+ * Subscribe to notifications (poll-based)
  */
 export const subscribeToNotifications = (userId, callback) => {
     if (!userId) return () => {};
@@ -33,9 +84,42 @@ export const subscribeToNotifications = (userId, callback) => {
 };
 
 /**
+ * Check current notification permission status
+ */
+export const getNotificationPermission = () => {
+    if (!('Notification' in window)) return 'unsupported';
+    return Notification.permission;
+};
+
+/**
+ * Enable push notifications (convenience function)
+ */
+export const enablePushNotifications = async () => {
+    const permission = getNotificationPermission();
+    if (permission === 'granted') return true;
+    if (permission === 'denied') {
+        alert('Push notifications are blocked. Please enable them in browser settings.');
+        return false;
+    }
+    return await requestPushPermission() !== null;
+};
+
+// Helper: convert VAPID key
+function urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const rawData = window.atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; ++i) {
+        outputArray[i] = rawData.charCodeAt(i);
+    }
+    return outputArray;
+}
+
+/**
  * Mark a single notification as read
  */
-export const markNotificationRead = async (notificationId) => {
+export const markNotificationRead = async () => {
     try {
         await notificationsApi.markAllRead(); // best we can do without single-read endpoint
     } catch (err) {
@@ -46,7 +130,7 @@ export const markNotificationRead = async (notificationId) => {
 /**
  * Mark all notifications as read
  */
-export const markAllNotificationsRead = async (userId) => {
+export const markAllNotificationsRead = async () => {
     try {
         await notificationsApi.markAllRead();
     } catch (err) {

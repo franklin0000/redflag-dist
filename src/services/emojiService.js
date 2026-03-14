@@ -1,5 +1,13 @@
 
-import { supabase } from './supabase';
+const BASE = import.meta.env.VITE_API_URL || '';
+const getToken = () => localStorage.getItem('rf_token');
+async function apiRequest(path, options = {}) {
+    const token = getToken();
+    const headers = { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...options.headers };
+    const res = await fetch(`${BASE}${path}`, { ...options, headers });
+    if (!res.ok) return null;
+    return res.json().catch(() => null);
+}
 
 /**
  * Emoji Service - TikTok Style 🎵✨
@@ -104,19 +112,12 @@ export const emojiService = {
      */
     saveEmoji: async (userId, name, config) => {
         const svgContent = emojiService.generateSVG(config);
-
-        const { data, error } = await supabase
-            .from('custom_emojis')
-            .insert([{
-                user_id: userId,
-                name: name,
-                layers: config,
-                svg_content: svgContent
-            }])
-            .select();
-
-        if (error) throw error;
-        return data[0];
+        const data = await apiRequest('/api/emojis', {
+            method: 'POST',
+            body: JSON.stringify({ name, layers: config, svg_content: svgContent }),
+        });
+        if (!data) throw new Error('Failed to save emoji');
+        return data;
     },
 
     /**
@@ -124,19 +125,7 @@ export const emojiService = {
      */
     getUserEmojis: async (userId) => {
         try {
-            const { data, error } = await supabase
-                .from('custom_emojis')
-                .select('*')
-                .eq('user_id', userId)
-                .order('created_at', { ascending: false });
-
-            if (error) {
-                if (error.code === '42P01') {
-                    console.warn("Table custom_emojis missing, using empty list");
-                    return [];
-                }
-                throw error;
-            }
+            const data = await apiRequest('/api/emojis');
             return data || [];
         } catch (e) {
             console.error("Fetch emojis error:", e);

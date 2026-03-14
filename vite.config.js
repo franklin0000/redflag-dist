@@ -105,31 +105,6 @@ export default defineConfig({
   ],
   server: {
     allowedHosts: true,
-    proxy: {
-      // FaceCheck.id face-scan API — specific paths only (avoids conflicting with Express /api/*)
-      '/api/upload_pic': {
-        target: 'https://facecheck.id',
-        changeOrigin: true,
-        secure: true,
-      },
-      '/api/search': {
-        target: 'https://facecheck.id',
-        changeOrigin: true,
-        secure: true,
-      },
-      // Proxy all other /api/* calls to local Express backend in dev
-      '/api': {
-        target: 'http://localhost:3001',
-        changeOrigin: true,
-        secure: false,
-      },
-      '/pimeyes-api': {
-        target: 'https://pimeyes.com',
-        changeOrigin: true,
-        secure: true,
-        rewrite: (path) => path.replace(/^\/pimeyes-api/, '/api'),
-      }
-    }
   },
   optimizeDeps: {
     include: ['react-map-gl/mapbox', 'mapbox-gl']
@@ -141,8 +116,8 @@ export default defineConfig({
         manualChunks(id) {
           // Web3 / crypto — heavy, only used on wallet pages
           if (id.includes('node_modules/wagmi') || id.includes('node_modules/viem') ||
-              id.includes('node_modules/@wagmi') || id.includes('node_modules/connectkit') ||
-              id.includes('node_modules/@tanstack/react-query')) {
+            id.includes('node_modules/@wagmi') || id.includes('node_modules/connectkit') ||
+            id.includes('node_modules/@tanstack/react-query')) {
             return 'vendor-web3';
           }
           // Mapbox — 1.7MB, only for map pages
@@ -167,7 +142,7 @@ export default defineConfig({
           }
           // React core — kept small and fast
           if (id.includes('node_modules/react-dom') || id.includes('node_modules/react-router-dom') ||
-              id.includes('node_modules/react/') || id.includes('node_modules/scheduler')) {
+            id.includes('node_modules/react/') || id.includes('node_modules/scheduler')) {
             return 'vendor-react';
           }
         }

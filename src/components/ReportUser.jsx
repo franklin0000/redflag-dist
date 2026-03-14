@@ -1,12 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { reportsApi, uploadFile } from '../services/api';
 import { useAccount, useSendTransaction, useWaitForTransactionReceipt } from 'wagmi';
 import { toHex } from 'viem';
 
 export default function ReportUser({ targetUser, onClose }) {
-    const { user } = useAuth();
     const toast = useToast();
     const { isConnected } = useAccount();
     const [reason, setReason] = useState('');

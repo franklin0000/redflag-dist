@@ -40,6 +40,7 @@ const GuardianDashboard = React.lazy(() => import('./pages/GuardianDashboard'));
 const LiveDateRadar = React.lazy(() => import('./pages/LiveDateRadar'));
 const SafeRideTracker = React.lazy(() => import('./pages/SafeRideTracker'));
 const RedFlagMap = React.lazy(() => import('./pages/RedFlagMap'));
+const SafetyHistory = React.lazy(() => import('./pages/SafetyHistory'));
 
 import { AuthProvider } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
@@ -209,6 +210,11 @@ function App() {
                     <Route path="/settings" element={
                       <ProtectedRoute>
                         <Settings />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="/safety-history" element={
+                      <ProtectedRoute>
+                        <SafetyHistory />
                       </ProtectedRoute>
                     } />
                     <Route path="/verify" element={

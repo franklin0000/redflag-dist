@@ -1,6 +1,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { callService } from '../services/callService';
+import { startDeepfakeAnalysis, stopDeepfakeAnalysis } from '../services/deepfakeDetector';
 
 export default function VideoCall({ matchId, userId, callType, incomingSignal, onEnd }) {
     const [stream, setStream] = useState(null);
@@ -8,6 +9,12 @@ export default function VideoCall({ matchId, userId, callType, incomingSignal, o
     const [status, setStatus] = useState(incomingSignal ? 'Incoming Call...' : 'Calling...');
     const [isMuted, setIsMuted] = useState(false);
     const [isVideoOff, setIsVideoOff] = useState(callType === 'audio');
+    const [isRecording, setIsRecording] = useState(false);
+    const [recordingTime, setRecordingTime] = useState(0);
+    const [deepfakeResult, setDeepfakeResult] = useState(null);
+    const [showDeepfakeInfo, setShowDeepfakeInfo] = useState(false);
+    const [isScreenSharing, setIsScreenSharing] = useState(false);
+    const screenStreamRef = useRef(null);
 
     const [error, setError] = useState(null);
 
@@ -37,6 +44,15 @@ export default function VideoCall({ matchId, userId, callType, incomingSignal, o
                         setStream(localStream);
                         connectionRef.current = peer;
                         setStatus('Connected');
+                        
+                        // Start deepfake detection for video calls
+                        if (callType === 'video' || incomingSignal?.callType === 'video') {
+                            startDeepfakeAnalysis(
+                                localStream,
+                                (result) => setDeepfakeResult(result),
+                                (err) => console.warn('Deepfake detection:', err)
+                            );
+                        }
                     }
                 } else {
                     setStatus('Calling...');
@@ -158,8 +174,68 @@ export default function VideoCall({ matchId, userId, callType, incomingSignal, o
     };
 
     const handleEndCall = () => {
+        if (isRecording) {
+            callService.stopRecording();
+            setIsRecording(false);
+            setRecordingTime(0);
+        }
+        stopDeepfakeAnalysis();
         callService.endCall(matchId);
         onEnd();
+    };
+
+    const toggleRecording = () => {
+        if (isRecording) {
+            const blob = callService.stopRecording();
+            callService.downloadRecording(blob, `call_${matchId}_${Date.now()}.webm`);
+            setIsRecording(false);
+            setRecordingTime(0);
+        } else {
+            callService.startRecording(stream, () => {});
+            setIsRecording(true);
+        }
+    };
+
+    // Recording timer
+    useEffect(() => {
+        let interval;
+        if (isRecording) {
+            interval = setInterval(() => {
+                setRecordingTime(prev => prev + 1);
+            }, 1000);
+        }
+        return () => clearInterval(interval);
+    }, [isRecording]);
+
+    const toggleScreenShare = async () => {
+        if (isScreenSharing) {
+            callService.stopScreenShare(screenStreamRef.current);
+            screenStreamRef.current = null;
+            setIsScreenSharing(false);
+        } else {
+            await callService.startScreenShare(
+                (stream, isEnded) => {
+                    if (isEnded) {
+                        setIsScreenSharing(false);
+                        screenStreamRef.current = null;
+                    } else if (stream) {
+                        screenStreamRef.current = stream;
+                        setIsScreenSharing(true);
+                    }
+                },
+                (err) => {
+                    if (err.name !== 'NotAllowedError') {
+                        console.error('Screen share error:', err);
+                    }
+                }
+            );
+        }
+    };
+
+    const formatTime = (seconds) => {
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        return `${mins}:${secs.toString().padStart(2, '0')}`;
     };
 
     return (
@@ -237,7 +313,7 @@ export default function VideoCall({ matchId, userId, callType, incomingSignal, o
             </div>
 
             {/* Controls Bar */}
-            <div className="absolute bottom-12 left-1/2 transform -translate-x-1/2 flex items-center gap-6 px-8 py-5 bg-black/40 backdrop-blur-xl rounded-full border border-white/10 shadow-2xl ring-1 ring-white/5">
+            <div className="absolute bottom-12 left-1/2 transform -translate-x-1/2 flex items-center gap-4 px-8 py-5 bg-black/40 backdrop-blur-xl rounded-full border border-white/10 shadow-2xl ring-1 ring-white/5">
                 <button
                     onClick={toggleMute}
                     className={`group relative p-4 rounded-full transition-all duration-300 ${isMuted ? 'bg-white text-gray-900 shadow-white/20' : 'bg-gray-800/50 text-white hover:bg-gray-700'}`}
@@ -261,7 +337,91 @@ export default function VideoCall({ matchId, userId, callType, incomingSignal, o
                     <div className={`absolute inset-0 rounded-full opacity-0 group-hover:opacity-100 transition-opacity bg-white/20 blur-md`}></div>
                     <span className="material-icons relative z-10">{isVideoOff ? 'videocam_off' : 'videocam'}</span>
                 </button>
+
+                <button
+                    onClick={toggleRecording}
+                    className={`group relative p-4 rounded-full transition-all duration-300 ${isRecording ? 'bg-red-600 text-white shadow-red-500/50' : 'bg-gray-800/50 text-white hover:bg-gray-700'}`}
+                    title={isRecording ? 'Stop Recording' : 'Start Recording'}
+                >
+                    <div className={`absolute inset-0 rounded-full ${isRecording ? 'bg-red-500 animate-ping opacity-20' : 'opacity-0 group-hover:opacity-100 transition-opacity bg-white/20 blur-md'}`}></div>
+                    <span className="material-icons relative z-10">{isRecording ? 'stop' : 'fiber_manual_record'}</span>
+                </button>
+
+                {callType === 'video' && (
+                    <button
+                        onClick={toggleScreenShare}
+                        className={`group relative p-4 rounded-full transition-all duration-300 ${isScreenSharing ? 'bg-blue-600 text-white shadow-blue-500/50' : 'bg-gray-800/50 text-white hover:bg-gray-700'}`}
+                        title={isScreenSharing ? 'Stop Screen Share' : 'Share Screen'}
+                    >
+                        <div className={`absolute inset-0 rounded-full ${isScreenSharing ? 'bg-blue-500 animate-ping opacity-20' : 'opacity-0 group-hover:opacity-100 transition-opacity bg-white/20 blur-md'}`}></div>
+                        <span className="material-icons relative z-10">{isScreenSharing ? 'stop_screen_share' : 'screen_share'}</span>
+                    </button>
+                )}
             </div>
+
+            {/* Recording Indicator */}
+            {isRecording && (
+                <div className="absolute top-6 left-6 flex items-center gap-2 px-4 py-2 bg-red-600/90 backdrop-blur-xl rounded-full border border-red-500 shadow-lg">
+                    <span className="w-3 h-3 bg-white rounded-full animate-pulse"></span>
+                    <span className="text-white text-sm font-bold">{formatTime(recordingTime)}</span>
+                </div>
+            )}
+
+            {/* Deepfake Detection Indicator */}
+            {deepfakeResult && (
+                <button
+                    onClick={() => setShowDeepfakeInfo(!showDeepfakeInfo)}
+                    className={`absolute top-6 left-1/2 transform -translate-x-1/2 flex items-center gap-2 px-4 py-2 backdrop-blur-xl rounded-full border shadow-lg transition-colors ${
+                        deepfakeResult.risk === 'low' 
+                            ? 'bg-green-600/90 border-green-500 text-white'
+                            : deepfakeResult.risk === 'medium'
+                            ? 'bg-yellow-600/90 border-yellow-500 text-white'
+                            : 'bg-red-600/90 border-red-500 text-white'
+                    }`}
+                >
+                    <span className={`w-2 h-2 rounded-full ${
+                        deepfakeResult.risk === 'low' ? 'bg-green-400' 
+                        : deepfakeResult.risk === 'medium' ? 'bg-yellow-400' 
+                        : 'bg-red-400 animate-pulse'
+                    }`}></span>
+                    <span className="text-sm font-medium">
+                        {deepfakeResult.risk === 'low' ? 'Verified ✓' 
+                        : deepfakeResult.risk === 'medium' ? 'Warning' 
+                        : 'Check Carefully'}
+                    </span>
+                </button>
+            )}
+
+            {/* Deepfake Info Popup */}
+            {showDeepfakeInfo && deepfakeResult && (
+                <div className="absolute top-20 left-1/2 transform -translate-x-1/2 bg-black/90 backdrop-blur-xl rounded-2xl p-4 border border-gray-700 shadow-2xl max-w-xs">
+                    <div className="flex items-center justify-between mb-2">
+                        <h4 className="text-white font-bold">Face Analysis</h4>
+                        <button onClick={() => setShowDeepfakeInfo(false)} className="text-gray-400">
+                            <span className="material-icons text-sm">close</span>
+                        </button>
+                    </div>
+                    <div className="space-y-2">
+                        <div className="flex justify-between text-sm">
+                            <span className="text-gray-400">Risk Level:</span>
+                            <span className={`font-bold ${
+                                deepfakeResult.risk === 'low' ? 'text-green-400'
+                                : deepfakeResult.risk === 'medium' ? 'text-yellow-400'
+                                : 'text-red-400'
+                            }`}>
+                                {deepfakeResult.risk.toUpperCase()}
+                            </span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                            <span className="text-gray-400">Confidence:</span>
+                            <span className="text-white">{Math.round(deepfakeResult.confidence * 100)}%</span>
+                        </div>
+                        <div className="text-xs text-gray-400">
+                            {deepfakeResult.reasons.join(', ')}
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

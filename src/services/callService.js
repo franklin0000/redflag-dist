@@ -4,6 +4,8 @@ import { getSocket, connectSocket } from './socketService';
 
 let activePeer = null;
 let localStream = null;
+let mediaRecorder = null;
+let recordedChunks = [];
 
 function socket() {
   return getSocket() || connectSocket();
@@ -113,6 +115,80 @@ export const callService = {
       s.off('call:signal', handleSignal);
       s.off('call:end', handleEnd);
     };
+  },
+
+  startRecording: (stream, onDataAvailable) => {
+    recordedChunks = [];
+    const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus') 
+      ? 'video/webm;codecs=vp9,opus' 
+      : 'video/webm';
+
+    mediaRecorder = new MediaRecorder(stream, { mimeType });
+
+    mediaRecorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        recordedChunks.push(event.data);
+        if (onDataAvailable) onDataAvailable(event.data);
+      }
+    };
+
+    mediaRecorder.start(1000); // Capture every second
+    return mediaRecorder;
+  },
+
+  stopRecording: () => {
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+      mediaRecorder.stop();
+    }
+    return new Blob(recordedChunks, { type: 'video/webm' });
+  },
+
+  isRecording: () => {
+    return mediaRecorder && mediaRecorder.state === 'recording';
+  },
+
+  downloadRecording: (blob, filename) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename || `call_${Date.now()}.webm`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  },
+
+  startScreenShare: async (onStream, onError) => {
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: {
+          cursor: 'always',
+        },
+        audio: true,
+      });
+      
+      // Handle when user stops sharing via browser UI
+      stream.getVideoTracks()[0].onended = () => {
+        if (onStream) onStream(null, true);
+      };
+      
+      if (onStream) onStream(stream, false);
+      return stream;
+    } catch (err) {
+      if (err.name === 'NotAllowedError') {
+        console.log('Screen share cancelled');
+      } else {
+        console.error('Screen share error:', err);
+      }
+      if (onError) onError(err);
+      return null;
+    }
+  },
+
+  stopScreenShare: (screenStream) => {
+    if (screenStream) {
+      screenStream.getTracks().forEach(track => track.stop());
+    }
   },
 };
 

@@ -55,7 +55,7 @@ router.get('/:id', requireAuth, async (req, res) => {
 
 // PATCH /api/users/me — update profile
 router.patch('/me', requireAuth, async (req, res) => {
-  const { name, bio, location, lat, lng, avatar_url } = req.body;
+  const { name, bio, location, lat, lng, avatar_url, photo_url, is_paid, is_verified_web3, gender, wallet_address } = req.body;
   try {
     const { rows } = await db.query(
       `UPDATE users SET
@@ -64,12 +64,23 @@ router.patch('/me', requireAuth, async (req, res) => {
          location = COALESCE($3, location),
          lat = COALESCE($4, lat),
          lng = COALESCE($5, lng),
-         avatar_url = COALESCE($6, avatar_url),
+         avatar_url = COALESCE($6, COALESCE($7, avatar_url)),
+         is_paid = COALESCE($8, is_paid),
+         is_verified_web3 = COALESCE($9, is_verified_web3),
+         wallet_address = COALESCE($10, wallet_address),
          last_seen = NOW()
-       WHERE id = $7 RETURNING id, name, username, avatar_url, bio, is_paid, is_verified,
-         is_verified_web3, safety_score, location, lat, lng, email, created_at`,
-      [name, bio, location, lat, lng, avatar_url, req.user.id]
+       WHERE id = $11 RETURNING id, name, username, avatar_url, bio, is_paid, is_verified,
+         is_verified_web3, safety_score, location, lat, lng, email, wallet_address, created_at`,
+      [name, bio, location, lat, lng, avatar_url, photo_url, is_paid, is_verified_web3, wallet_address, req.user.id]
     );
+    // Update gender in dating_profiles if provided
+    if (gender) {
+      await db.query(
+        `INSERT INTO dating_profiles (user_id, gender) VALUES ($1,$2)
+         ON CONFLICT (user_id) DO UPDATE SET gender=$2`,
+        [req.user.id, gender]
+      ).catch(() => {});
+    }
     res.json(rows[0]);
   } catch (err) {
     res.status(500).json({ error: err.message });

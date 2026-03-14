@@ -9,6 +9,7 @@ import {
 } from '../services/locationService';
 import { contactsApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { twilioApi } from '../services/twilioService';
 
 export default function DateCheckIn() {
     const navigate = useNavigate();
@@ -31,20 +32,18 @@ export default function DateCheckIn() {
         const saved = localStorage.getItem('rf_saved_contacts');
         return saved ? JSON.parse(saved) : [];
     });
-    const [contactsLoaded, setContactsLoaded] = useState(false);
 
     // Load contacts from API on mount
     useEffect(() => {
-        if (!user?.id) { setContactsLoaded(true); return; }
+        if (!user?.id) { return; }
         contactsApi.getAll()
             .then((data) => {
                 if (data && data.length > 0) {
                     setContacts(data);
                     localStorage.setItem('rf_saved_contacts', JSON.stringify(data));
                 }
-                setContactsLoaded(true);
             })
-            .catch(() => { setContactsLoaded(true); });
+            .catch(() => { });
     }, [user?.id]);
 
     // Location state
@@ -125,8 +124,8 @@ export default function DateCheckIn() {
         };
     }, []);
 
-    // Send real WhatsApp / SMS deep links to each trusted contact
-    const notifyContacts = useCallback((type, message, locationLink = null) => {
+    // Send SMS alerts via Twilio (with fallback to native SMS)
+    const notifyContacts = useCallback(async (type, message, locationLink = null) => {
         if (contacts.length === 0) return;
 
         let fullMessage = `[RedFlag ${type}] ${message}`;
@@ -137,17 +136,32 @@ export default function DateCheckIn() {
         }
         fullMessage += `\nTime: ${new Date().toLocaleTimeString()}`;
 
-        const encodedMsg = encodeURIComponent(fullMessage);
-        const phones = contacts.filter(c => c.phone).map(c => c.phone.replace(/[^0-9+]/g, ''));
+        const validContacts = contacts.filter(c => c.phone);
 
-        if (phones.length > 0) {
-            window.location.href = `sms:${phones.join(',')}?body=${encodedMsg}`;
+        // Try Twilio first
+        try {
+            if (type === 'SOS ALERT') {
+                await twilioApi.sendSOS(
+                    validContacts.map(c => ({ name: c.name, phone: c.phone })),
+                    locationLink,
+                    user?.name
+                );
+            } else {
+                for (const contact of validContacts) {
+                    await twilioApi.sendSMS(contact.phone, fullMessage);
+                }
+            }
+            toast.info(`Alert sent via SMS to ${validContacts.map(c => c.name).join(', ')}`);
+        } catch (err) {
+            // Fallback to native SMS
+            console.warn('Twilio failed, falling back to native SMS:', err.message);
+            const encodedMsg = encodeURIComponent(fullMessage);
+            const phones = validContacts.map(c => c.phone.replace(/[^0-9+]/g, ''));
+            if (phones.length > 0) {
+                window.location.href = `sms:${phones.join(',')}?body=${encodedMsg}`;
+            }
         }
-
-        if (type !== 'SOS ALERT') {
-            toast.info(`Alert sent to ${contacts.map(c => c.name).join(', ')}`);
-        }
-    }, [contacts, toast, meetingProfile]);
+    }, [contacts, toast, meetingProfile, user, location]);
 
     // Start guard
     const startTimer = () => {
@@ -184,7 +198,7 @@ export default function DateCheckIn() {
     };
 
     // Panic handler
-    const handlePanic = useCallback(() => {
+    const handlePanic = useCallback(async () => {
         setIsPanicking(true);
         const mapsLink = location ? getGoogleMapsLink(location.lat, location.lng) : 'Location unavailable';
         const sosMessage = `🚨 URGENT: I need help! I triggered my panic button. Location: ${mapsLink}`;
@@ -205,20 +219,20 @@ export default function DateCheckIn() {
             navigator.vibrate([500, 200, 500, 200, 1000]);
         }
 
-        // 3. Auto-Dial (after small delay)
-        setTimeout(() => {
-            window.location.href = `tel:${emergencyNumber.number}`;
-        }, 1500);
-
-        // 4. Console log for SMS simulation
-        if (contacts.length > 0) {
-            console.log("SMS would open here on mobile");
+        // 3. Try Twilio call first, fallback to tel: link
+        try {
+            await twilioApi.makeEmergencyCall(mapsLink, user?.name);
+        } catch (err) {
+            console.warn('Twilio call failed, using native dial:', err.message);
+            setTimeout(() => {
+                window.location.href = `tel:${emergencyNumber.number}`;
+            }, 1500);
         }
 
         toast.error(`🚨 SOS ACTIVATED! Siren playing & calling ${emergencyNumber.label}...`);
 
         notifyContacts('SOS ALERT', sosMessage, mapsLink);
-    }, [contacts, location, toast, emergencyNumber, notifyContacts]);
+    }, [contacts, location, toast, emergencyNumber, notifyContacts, user]);
 
     // Stop panic (silence alarm)
     const stopPanic = () => {

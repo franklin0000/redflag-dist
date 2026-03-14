@@ -134,9 +134,10 @@ export const datingApi = {
 
 // ── POSTS ─────────────────────────────────────────────────────
 export const postsApi = {
-  getFeed: (limit = 20, offset = 0) => request(`/api/posts?limit=${limit}&offset=${offset}`),
-  createPost: (content, media_url) =>
-    request('/api/posts', { method: 'POST', body: JSON.stringify({ content, media_url }) }),
+  getFeed: (limit = 20, offset = 0, room_id) =>
+    request(`/api/posts?limit=${limit}&offset=${offset}${room_id ? `&room_id=${room_id}` : ''}`),
+  createPost: (content, media_url, room_id, media_type, media_name) =>
+    request('/api/posts', { method: 'POST', body: JSON.stringify({ content, media_url, room_id, media_type, media_name }) }),
   deletePost: (id) => request(`/api/posts/${id}`, { method: 'DELETE' }),
   react: (id, emoji) =>
     request(`/api/posts/${id}/react`, { method: 'POST', body: JSON.stringify({ emoji }) }),
@@ -221,6 +222,13 @@ export const userExtras = {
   getMuteStatus: (matchId) => request(`/api/users/mute/${matchId}`),
   muteChat: (matchId) => request(`/api/users/mute/${matchId}`, { method: 'POST' }),
   unmuteChat: (matchId) => request(`/api/users/mute/${matchId}`, { method: 'DELETE' }),
+  // Safety History
+  getGuardianHistory: () => request('/api/safety/guardian-history'),
+  getDateGuardHistory: () => request('/api/safety/date-guard-history'),
+  createGuardianSession: (data) => request('/api/safety/guardian-session', { method: 'POST', body: JSON.stringify(data) }),
+  updateGuardianSession: (id, data) => request(`/api/safety/guardian-session/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  createDateGuard: (data) => request('/api/safety/date-guard', { method: 'POST', body: JSON.stringify(data) }),
+  updateDateGuard: (id, data) => request(`/api/safety/date-guard/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
 };
 
 // ── TRUSTED CONTACTS ──────────────────────────────────────────

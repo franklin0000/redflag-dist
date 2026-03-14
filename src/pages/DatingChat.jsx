@@ -219,7 +219,7 @@ export default function DatingChat() {
             unsubscribeMessages();
             unsubscribeCalls();
         };
-    }, [matchId, user?.id]);
+    }, [matchId, user?.id, markMatchRead]);
 
     // Check mute & block status on mount
     useEffect(() => {

@@ -10,6 +10,11 @@
 
 const API_TOKEN = import.meta.env.VITE_FACECHECK_TOKEN || '';
 
+const getFunctionUrl = (name) => {
+    const base = import.meta.env.VITE_SUPABASE_URL || '';
+    return `${base}/functions/v1/${name}`;
+};
+
 // Use real mode when token is set, testing mode otherwise.
 // Testing mode: inaccurate results but credits NOT deducted.
 export const isTestingMode = () => {
@@ -98,24 +103,19 @@ function formatItems(items) {
 }
 
 /**
- * Upload a photo to FaceCheck.id for face recognition search.
+ * Upload a photo to FaceCheck.id via Supabase Edge Function proxy.
  * @param {File} fileObject
  * @returns {Promise<{ id_search?: string, message?: string, error?: string, code?: string }>}
  */
 export async function uploadPhoto(fileObject) {
-    const testingMode = isTestingMode();
-    if (testingMode) {
-        console.log('FaceCheck: TESTING MODE — results are inaccurate, credits NOT deducted');
-    } else {
-        console.log('FaceCheck: REAL MODE — credits will be deducted on match');
-    }
+    const url = getFunctionUrl('facecheck-proxy');
 
     const formData = new FormData();
     formData.append('images', fileObject);
     formData.append('id_search', '');
 
     try {
-        const response = await fetch('/api/upload_pic', {
+        const response = await fetch(`${url}/upload_pic`, {
             method: 'POST',
             headers: { 'Authorization': API_TOKEN },
             body: formData,
@@ -129,12 +129,13 @@ export async function uploadPhoto(fileObject) {
 }
 
 /**
- * Poll FaceCheck.id until face search results are ready.
+ * Poll FaceCheck.id via Supabase Edge Function proxy until face search results are ready.
  * @param {string} idSearch — from uploadPhoto response
  * @param {function} onProgress — called with 0–100 progress value
  * @returns {Promise<{ items?: Array, error?: string, code?: string }>}
  */
 export async function pollResults(idSearch, onProgress) {
+    const url = getFunctionUrl('facecheck-proxy');
     const testingMode = isTestingMode();
     const payload = {
         id_search: idSearch,
@@ -149,7 +150,7 @@ export async function pollResults(idSearch, onProgress) {
     while (attempts < maxAttempts) {
         attempts++;
         try {
-            const response = await fetch('/api/search', {
+            const response = await fetch(`${url}/search`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

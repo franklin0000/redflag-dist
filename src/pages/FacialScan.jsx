@@ -76,18 +76,8 @@ export default function FacialScan() {
                 const formData = new FormData();
                 formData.append('file', file);
 
-                const { authApi } = await import('../services/api');
-                const token = authApi.getToken();
-                const BASE = import.meta.env.VITE_API_URL || '';
-
-                const response = await fetch(`${BASE}/api/searches/background-check`, {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${token}` },
-                    body: formData
-                });
-
-                if (!response.ok) throw new Error('Background Search failed');
-                const data = await response.json();
+                const { searchesApi } = await import('../services/api');
+                const data = await searchesApi.backgroundCheck(file);
 
                 if (!isMounted) return;
                 setProgress(95);

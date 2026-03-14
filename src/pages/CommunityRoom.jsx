@@ -109,9 +109,8 @@ export default function CommunityRoom() {
         const fetchPosts = async () => {
             let fetchedPosts = [];
             try {
-                const data = await postsApi.getFeed(50, 0);
-                const filtered = (data || []).filter(p => p.room_id === roomId);
-                fetchedPosts = mapPosts(filtered);
+                const data = await postsApi.getFeed(50, 0, roomId);
+                fetchedPosts = mapPosts(data || []);
             } catch (err) {
                 console.warn("Failed to fetch posts:", err);
             }
@@ -132,10 +131,10 @@ export default function CommunityRoom() {
                 return [mapped, ...prev];
             });
         };
-        socket?.on('community:new_post', onNewPost);
+        socket?.on('new_community_post', onNewPost);
 
         return () => {
-            socket?.off('community:new_post', onNewPost);
+            socket?.off('new_community_post', onNewPost);
         };
     }, [roomId, room]);
 
@@ -324,7 +323,7 @@ export default function CommunityRoom() {
                 }
             }
 
-            const data = await postsApi.createPost(optimisticPost.content, mediaUrl);
+            const data = await postsApi.createPost(optimisticPost.content, mediaUrl, roomId, fileType, fileName);
 
             // 2. Replace Optimistic Post with Real Post
             const realPost = mapPosts([{ ...data, room_id: roomId, media_type: fileType, media_name: fileName }])[0];
