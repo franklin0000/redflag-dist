@@ -6,9 +6,11 @@
 
 const BASE = import.meta.env.VITE_API_URL || '';
 
+import { getToken } from './api';
+
 export async function runLocalScan(fileObject, username = '') {
     const url = `${BASE}/api/searches/background-check`;
-    const token = localStorage.getItem('token'); // Assuming standard JWT storage
+    const token = getToken(); 
 
     const formData = new FormData();
     formData.append('file', fileObject);
