@@ -76,6 +76,14 @@ export default function CommunityRoom() {
     const [verifying, setVerifying] = useState(false);
     const [verifyError, setVerifyError] = useState(null);
 
+    // Selfie camera state
+    const cameraRef = useRef(null);
+    const canvasRef = useRef(null);
+    const [cameraStream, setCameraStream] = useState(null);
+    const [capturedBlob, setCapturedBlob] = useState(null);
+    const [capturedDataUrl, setCapturedDataUrl] = useState(null);
+    const [cameraError, setCameraError] = useState(null);
+
     // Mapper to match UI expectations
     const mapPosts = (data) => {
         return data.map(p => {
@@ -354,16 +362,80 @@ export default function CommunityRoom() {
 
     const totalReactions = (r) => Object.values(r || {}).reduce((a, b) => a + b, 0);
 
+    // Camera lifecycle — start when modal opens, stop when it closes
+    useEffect(() => {
+        if (verifyModalOpen) {
+            startCamera();
+        } else {
+            stopCamera();
+            setCapturedBlob(null);
+            setCapturedDataUrl(null);
+            setCameraError(null);
+            setVerifyError(null);
+        }
+        return () => stopCamera();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [verifyModalOpen]);
+
+    // Attach stream to video element whenever stream changes
+    useEffect(() => {
+        if (cameraRef.current && cameraStream) {
+            cameraRef.current.srcObject = cameraStream;
+        }
+    }, [cameraStream]);
+
+    const startCamera = async () => {
+        setCameraError(null);
+        setCapturedBlob(null);
+        setCapturedDataUrl(null);
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: 'user', width: { ideal: 480 }, height: { ideal: 480 } },
+                audio: false
+            });
+            setCameraStream(stream);
+        } catch {
+            setCameraError('No se pudo acceder a la cámara. Por favor permite el acceso e intenta de nuevo.');
+        }
+    };
+
+    const stopCamera = () => {
+        setCameraStream(prev => {
+            if (prev) prev.getTracks().forEach(t => t.stop());
+            return null;
+        });
+    };
+
+    const capturePhoto = () => {
+        if (!cameraRef.current || !canvasRef.current) return;
+        const video = cameraRef.current;
+        const canvas = canvasRef.current;
+        const size = Math.min(video.videoWidth || 480, video.videoHeight || 480);
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        // Mirror the capture to match what the user sees
+        ctx.translate(size, 0);
+        ctx.scale(-1, 1);
+        ctx.drawImage(video, 0, 0, size, size);
+        canvas.toBlob(blob => {
+            setCapturedBlob(blob);
+            setCapturedDataUrl(canvas.toDataURL('image/jpeg', 0.9));
+            stopCamera();
+        }, 'image/jpeg', 0.9);
+    };
+
     const handleVerifyGender = async () => {
+        if (!capturedBlob) return;
         setVerifying(true);
         setVerifyError(null);
         try {
+            const form = new FormData();
+            form.append('selfie', capturedBlob, 'selfie.jpg');
             const res = await fetch('/api/users/verify-gender', {
                 method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${localStorage.getItem('token')}`,
-                    'Content-Type': 'application/json'
-                }
+                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+                body: form
             });
             const data = await res.json();
             if (!res.ok) {
@@ -373,8 +445,8 @@ export default function CommunityRoom() {
                 toast.success('¡Identidad verificada! Bienvenida/o.');
                 window.location.reload();
             }
-        } catch (e) {
-            setVerifyError('Network error. Please try again.');
+        } catch {
+            setVerifyError('Error de red. Por favor intenta de nuevo.');
         } finally {
             setVerifying(false);
         }
@@ -691,74 +763,124 @@ export default function CommunityRoom() {
                 </div>
             )}
 
-            {/* AI Gender Verification Modal */}
+            {/* AI Gender Verification Modal — Live Selfie Camera */}
             {verifyModalOpen && (
-                <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center px-4 pb-4 sm:pb-0 bg-black/70 backdrop-blur-sm">
+                <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center px-4 pb-4 sm:pb-0 bg-black/80 backdrop-blur-sm">
                     <div className="bg-white dark:bg-[#1a1525] rounded-3xl shadow-2xl w-full max-w-sm border border-gray-100 dark:border-white/10 overflow-hidden">
-                        <div className="px-6 pt-6 pb-4 text-center">
-                            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-500/20 to-primary/20 flex items-center justify-center mx-auto mb-4 text-2xl">
-                                🔍
+                        {/* Header */}
+                        <div className="px-6 pt-6 pb-3 text-center">
+                            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-500/20 to-primary/20 flex items-center justify-center mx-auto mb-3 text-2xl">
+                                🤳
                             </div>
-                            <h2 className="text-lg font-bold text-slate-900 dark:text-white">Verificación de identidad</h2>
-                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5 leading-relaxed">
-                                Para proteger este espacio privado, verificamos tu identidad con IA usando tu foto de perfil. Solo toma un segundo.
+                            <h2 className="text-lg font-bold text-slate-900 dark:text-white">Verificación de Identidad</h2>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                                {capturedDataUrl
+                                    ? '¿Todo bien? Pulsa "Verificar" para analizar tu selfie.'
+                                    : 'Coloca tu cara en el centro y toma una selfie clara.'}
                             </p>
                         </div>
 
-                        {/* Profile photo preview */}
-                        <div className="flex justify-center pb-2">
-                            {user?.avatar_url ? (
+                        {/* Camera / Preview area */}
+                        <div className="flex justify-center px-6 pb-3">
+                            {cameraError ? (
+                                <div className="w-56 h-56 rounded-2xl bg-slate-100 dark:bg-slate-800 flex flex-col items-center justify-center border-2 border-dashed border-slate-300 dark:border-slate-600">
+                                    <span className="material-icons text-4xl text-red-400 mb-2">videocam_off</span>
+                                    <p className="text-[11px] text-red-500 text-center px-4 leading-snug">{cameraError}</p>
+                                    <button onClick={startCamera} className="mt-3 text-xs font-semibold text-violet-500 hover:underline">
+                                        Reintentar
+                                    </button>
+                                </div>
+                            ) : capturedDataUrl ? (
+                                /* Captured photo preview */
                                 <div className="relative">
                                     <img
-                                        src={user.avatar_url}
-                                        alt="Tu foto"
-                                        className="w-24 h-24 rounded-2xl object-cover border-4 border-violet-200 dark:border-violet-800/40 shadow-lg"
+                                        src={capturedDataUrl}
+                                        alt="Tu selfie"
+                                        className="w-56 h-56 rounded-2xl object-cover border-4 border-violet-300 dark:border-violet-700 shadow-xl"
                                     />
-                                    <div className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-violet-500 flex items-center justify-center text-white text-xs">
-                                        <span className="material-icons text-sm">face</span>
+                                    <div className="absolute -bottom-2 -right-2 w-8 h-8 rounded-full bg-green-500 flex items-center justify-center text-white shadow-lg">
+                                        <span className="material-icons text-base">check</span>
                                     </div>
                                 </div>
                             ) : (
-                                <div className="w-24 h-24 rounded-2xl bg-slate-100 dark:bg-slate-800 flex flex-col items-center justify-center border-2 border-dashed border-slate-300 dark:border-slate-600">
-                                    <span className="material-icons text-3xl text-slate-400">add_a_photo</span>
-                                    <p className="text-[9px] text-slate-400 mt-1">No photo</p>
+                                /* Live camera feed */
+                                <div className="relative">
+                                    <video
+                                        ref={cameraRef}
+                                        autoPlay
+                                        playsInline
+                                        muted
+                                        className="w-56 h-56 rounded-2xl object-cover border-4 border-violet-300 dark:border-violet-700 shadow-xl"
+                                        style={{ transform: 'scaleX(-1)' }}
+                                    />
+                                    {/* Live indicator */}
+                                    <div className="absolute top-2 right-2 flex items-center gap-1 bg-black/50 rounded-full px-2 py-0.5">
+                                        <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                                        <span className="text-[9px] text-white font-bold">LIVE</span>
+                                    </div>
+                                    {/* Face guide overlay */}
+                                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                        <div className="w-32 h-36 rounded-full border-2 border-white/40 border-dashed" />
+                                    </div>
                                 </div>
                             )}
+                            {/* Hidden canvas for capture */}
+                            <canvas ref={canvasRef} className="hidden" />
                         </div>
 
-                        {!user?.avatar_url && (
-                            <p className="text-center text-xs text-orange-500 px-6 pb-2">
-                                Necesitas una foto de perfil para verificar. Ve a tu perfil y agrega una.
-                            </p>
-                        )}
-
+                        {/* Error message */}
                         {verifyError && (
                             <div className="mx-4 mb-3 px-4 py-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl">
-                                <p className="text-xs text-red-600 dark:text-red-400 text-center">{verifyError}</p>
+                                <p className="text-xs text-red-600 dark:text-red-400 text-center leading-snug">{verifyError}</p>
                             </div>
                         )}
 
-                        <div className="px-4 pb-5 space-y-2.5">
+                        {/* Action buttons */}
+                        <div className="px-4 pb-5 space-y-2">
+                            {!capturedDataUrl ? (
+                                /* Capture button */
+                                <button
+                                    onClick={capturePhoto}
+                                    disabled={!cameraStream}
+                                    className="w-full flex items-center justify-center gap-2 py-3.5 bg-gradient-to-r from-violet-600 to-primary text-white font-bold rounded-2xl shadow-lg shadow-violet-500/25 disabled:opacity-40 active:scale-[0.98] transition-all"
+                                >
+                                    <span className="material-icons text-lg">photo_camera</span>
+                                    Tomar selfie
+                                </button>
+                            ) : (
+                                <>
+                                    {/* Verify button */}
+                                    <button
+                                        onClick={handleVerifyGender}
+                                        disabled={verifying}
+                                        className="w-full flex items-center justify-center gap-2 py-3.5 bg-gradient-to-r from-violet-600 to-primary text-white font-bold rounded-2xl shadow-lg shadow-violet-500/25 disabled:opacity-50 active:scale-[0.98] transition-all"
+                                    >
+                                        {verifying ? (
+                                            <>
+                                                <div className="w-4 h-4 border-2 border-white/50 border-t-white rounded-full animate-spin" />
+                                                Analizando con IA...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <span className="material-icons text-sm">verified_user</span>
+                                                Verificar con IA
+                                            </>
+                                        )}
+                                    </button>
+                                    {/* Retake button */}
+                                    <button
+                                        onClick={() => { setCapturedDataUrl(null); setCapturedBlob(null); setVerifyError(null); startCamera(); }}
+                                        disabled={verifying}
+                                        className="w-full text-xs text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 font-medium transition-colors py-2 flex items-center justify-center gap-1.5"
+                                    >
+                                        <span className="material-icons text-sm">refresh</span>
+                                        Tomar otra foto
+                                    </button>
+                                </>
+                            )}
                             <button
-                                onClick={handleVerifyGender}
-                                disabled={verifying || !user?.avatar_url}
-                                className="w-full flex items-center justify-center gap-2 py-3.5 bg-gradient-to-r from-violet-600 to-primary text-white font-bold rounded-2xl shadow-lg disabled:opacity-50 active:scale-[0.98] transition-all"
-                            >
-                                {verifying ? (
-                                    <>
-                                        <div className="w-4 h-4 border-2 border-white/50 border-t-white rounded-full animate-spin" />
-                                        Analizando foto...
-                                    </>
-                                ) : (
-                                    <>
-                                        <span className="material-icons text-sm">verified_user</span>
-                                        Verificar con IA
-                                    </>
-                                )}
-                            </button>
-                            <button
-                                onClick={() => navigate('/community')}
-                                className="w-full text-[11px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors py-2"
+                                onClick={() => { setVerifyModalOpen(false); navigate('/community'); }}
+                                className="w-full text-[11px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors py-1.5"
                             >
                                 Volver al Community Hub
                             </button>

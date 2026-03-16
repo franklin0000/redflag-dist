@@ -87,17 +87,40 @@ router.patch('/me', requireAuth, async (req, res) => {
   }
 });
 
-// POST /api/users/verify-gender — AI gender verification using profile photo
-// Runs DeepFace on the user's avatar, compares with declared gender in dating_profiles.
-// On success sets gender_verified = true in dating_profiles.
-router.post('/verify-gender', requireAuth, async (req, res) => {
+// POST /api/users/verify-gender — AI gender verification using a live selfie
+// Accepts a multipart selfie upload, runs DeepFace on the image, compares with
+// declared gender in dating_profiles. On success sets gender_verified = true.
+const multer = require('multer');
+const crypto = require('crypto');
+const SELFIE_DIR = process.env.UPLOAD_DIR || '/tmp/rf_uploads';
+require('fs').mkdirSync(SELFIE_DIR, { recursive: true });
+const selfieUpload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => cb(null, SELFIE_DIR),
+    filename: (req, file, cb) => cb(null, `selfie_${crypto.randomBytes(8).toString('hex')}.jpg`),
+  }),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (!file.mimetype.startsWith('image/')) return cb(new Error('Images only'), false);
+    cb(null, true);
+  },
+}).single('selfie');
+
+router.post('/verify-gender', requireAuth, (req, res, next) => {
+  selfieUpload(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    next();
+  });
+}, async (req, res) => {
   const { spawn } = require('child_process');
   const path = require('path');
+  const fs = require('fs');
 
-  const photoUrl = req.user.avatar_url || req.user.photo_url;
-  if (!photoUrl) {
-    return res.status(400).json({ error: 'No profile photo found. Please upload a profile photo first.' });
+  if (!req.file) {
+    return res.status(400).json({ error: 'Selfie required. Please take a photo.' });
   }
+
+  const selfiePath = req.file.path;
 
   // Get declared gender from dating_profiles
   const { rows: dpRows } = await db.query(
@@ -106,13 +129,14 @@ router.post('/verify-gender', requireAuth, async (req, res) => {
   );
   const declaredGender = dpRows[0]?.gender;
   if (!declaredGender) {
+    fs.unlink(selfiePath, () => {});
     return res.status(400).json({ error: 'Gender not set. Please select your gender first.' });
   }
 
-  // Run Python verify_gender.py
+  // Run Python verify_gender.py with local file path (no download needed)
   const scriptPath = path.join(__dirname, '..', 'python', 'verify_gender.py');
   const result = await new Promise((resolve) => {
-    const py = spawn('python3', [scriptPath, photoUrl, declaredGender], { env: process.env });
+    const py = spawn('python3', [scriptPath, selfiePath, declaredGender], { env: process.env });
     let out = '', err = '';
     py.stdout.on('data', d => { out += d.toString(); });
     py.stderr.on('data', d => { err += d.toString(); });
@@ -123,13 +147,16 @@ router.post('/verify-gender', requireAuth, async (req, res) => {
     });
   });
 
+  // Always clean up temp selfie
+  fs.unlink(selfiePath, () => {});
+
   if (result.error) {
     return res.status(422).json({ error: result.error, confidence: result.confidence });
   }
 
   if (!result.match) {
     return res.status(403).json({
-      error: `Photo appears to show a ${result.detected} person, but your declared gender is ${declaredGender}. Please use a clear selfie photo.`,
+      error: `Tu selfie muestra a una persona ${result.detected === 'male' ? 'masculina' : 'femenina'}, pero tu género declarado es ${declaredGender}. Usa una selfie clara de tu cara.`,
       detected: result.detected,
       confidence: result.confidence
     });
