@@ -11,6 +11,7 @@ def process_scanner(img_path):
         
         results = []
         if res.get("ok"):
+            # 1. Local Match (Highest Priority)
             if res.get("local_match"):
                 results.append({
                     "score": round((1 - res.get("distance", 0)) * 100, 2),
@@ -22,7 +23,23 @@ def process_scanner(img_path):
                     "isTargetedSearch": False,
                     "attributes": res.get("attributes", {})
                 })
-            elif res.get("web_search_url"):
+            
+            # 2. Cloud Search Results from Yandex Vision API
+            cloud_hits = res.get("cloud_results", [])
+            for hit in cloud_hits:
+                results.append({
+                    "score": 90, # High confidence if found in cloud
+                    "url": hit.get("page_url"),
+                    "group": "Cloud Search",
+                    "title": f"Public Profile Found (Yandex Vision)",
+                    "icon": "cloud_done",
+                    "isRisk": True,
+                    "isTargetedSearch": False,
+                    "thumbnail": hit.get("url")
+                })
+
+            # 3. Yandex Web Fallback (If no results)
+            if not results and res.get("web_search_url"):
                 results.append({
                     "score": 0,
                     "url": res.get("web_search_url"),
@@ -31,7 +48,7 @@ def process_scanner(img_path):
                     "icon": "travel_explore",
                     "isRisk": False,
                     "isTargetedSearch": True,
-                    "openNow": True # Pista para el frontend
+                    "openNow": True
                 })
         return results if results else []
     except Exception as e:

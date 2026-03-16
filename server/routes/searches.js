@@ -12,7 +12,13 @@ router.post('/background-check', requireAuth, upload.single('file'), (req, res) 
 
   const scriptPath = path.join(__dirname, '..', 'python', 'background_check.py');
 
-  const py = spawn('python3', [scriptPath, imagePath, usernameQuery]);
+  const py = spawn('python3', [scriptPath, imagePath, usernameQuery], {
+    env: {
+      ...process.env,
+      VITE_YANDEX_VISION_KEY: process.env.VITE_YANDEX_VISION_KEY,
+      YANDEX_FOLDER_ID: process.env.YANDEX_FOLDER_ID || 'b1g5d3bsuqm0ivg26kvg'
+    }
+  });
   let output = '';
   let errorOutput = '';
 

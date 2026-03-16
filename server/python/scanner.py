@@ -9,10 +9,13 @@ import sys
 from insightface.app import FaceAnalysis
 from deepface import DeepFace
 
-# Configuración de modelos y archivos
 INDEX_FILE = 'face_index.faiss'
 METADATA_FILE = 'metadata.pkl'
 THRESHOLD = 0.35
+
+# Yandex Cloud Config (Read from env)
+YANDEX_KEY = os.getenv('VITE_YANDEX_VISION_KEY')
+YANDEX_FOLDER = os.getenv('YANDEX_FOLDER_ID', 'b1g5d3bsuqm0ivg26kvg')
 
 # Inicializar InsightFace (buffalo_l)
 print("Cargando InsightFace (buffalo_l)...")
@@ -55,6 +58,40 @@ def get_yandex_url(image_path):
     """Retorna la URL de búsqueda de Yandex con filtros."""
     search_query = "onlyfans+porn+escort+nsfw"
     return f"https://yandex.com/images/search?text={search_query}"
+
+def yandex_cloud_search(image_path):
+    """Llama a la API de Yandex Cloud Vision para detección y búsqueda de copias."""
+    if not YANDEX_KEY:
+        return None
+    
+    import base64
+    try:
+        with open(image_path, "rb") as f:
+            encoded_image = base64.b64encode(f.read()).decode('utf-8')
+        
+        url = "https://vision.api.cloud.yandex.net/vision/v1/batchAnalyze"
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Api-Key {YANDEX_KEY}"
+        }
+        
+        payload = {
+            "folderId": YANDEX_FOLDER,
+            "analyzeSpecs": [{
+                "content": encoded_image,
+                "features": [
+                    {"type": "FACE_DETECTION"},
+                    {"type": "IMAGE_COPY_SEARCH"}
+                ]
+            }]
+        }
+        
+        response = requests.post(url, headers=headers, json=payload, timeout=10)
+        if response.status_code == 200:
+            return response.json()
+    except Exception as e:
+        print(f"Yandex Cloud Error: {e}", file=sys.stderr)
+    return None
 
 def scan_face(image_path):
     """
@@ -109,10 +146,36 @@ def scan_face(image_path):
     # 3. Búsqueda local
     result = search_local(emb)
     
+    # 4. Búsqueda en la nube (Yandex Vision) - Solo si no hay match local
+    cloud_results = []
+    if not result["match"]:
+        cloud_data = yandex_cloud_search(image_path)
+        if cloud_data:
+            # Extraer resultados de IMAGE_COPY_SEARCH
+            for res in cloud_data.get("results", []):
+                for ann in res.get("results", []):
+                    if "imageCopySearch" in ann:
+                        copies = ann["imageCopySearch"].get("copyImageResults", [])
+                        for copy in copies[:5]: # Top 5 
+                            cloud_results.append({
+                                "url": copy.get("imageUrl"),
+                                "page_url": copy.get("pageUrl"),
+                                "title": "Búsqueda en la nube (Yandex Cloud)"
+                            })
+                    # Mejorar atributos si Yandex detectó cara
+                    if "faceDetection" in ann:
+                        faces_found = ann["faceDetection"].get("faces", [])
+                        if faces_found:
+                            y_attr = faces_found[0].get("attributes", {})
+                            if y_attr:
+                                attributes["cloud_gender"] = y_attr.get("gender", {}).get("value")
+                                attributes["cloud_age"] = y_attr.get("age", {}).get("value")
+
     final_response = {
         "ok": True,
         "local_match": result["match"],
-        "attributes": attributes
+        "attributes": attributes,
+        "cloud_results": cloud_results
     }
 
     if result["match"]:
@@ -122,7 +185,10 @@ def scan_face(image_path):
             "url": result["metadata"].get("url", "N/A")
         })
     else:
-        final_response["message"] = "No se encontró match local. Iniciando búsqueda web..."
+        final_response["message"] = "No se encontró match local."
+        if cloud_results:
+            final_response["message"] = "Se encontraron coincidencias en la nube."
+        
         final_response["web_search_url"] = get_yandex_url(image_path)
 
     return final_response
