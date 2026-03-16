@@ -3,9 +3,40 @@ const db = require('../db');
 const { requireAuth, optionalAuth } = require('../middleware/auth');
 const { getIO } = require('../ioRef');
 
+// ── Gender Room Access Control ────────────────────────────────────────────────
+// 'women' room → female only | 'men' room → male only | others → open
+const ROOM_GENDER = { women: 'female', men: 'male' };
+
+function normalizeGender(g) {
+  if (!g) return '';
+  const lower = String(g).toLowerCase().trim();
+  if (lower === 'mujer') return 'female';
+  if (lower === 'hombre') return 'male';
+  return lower;
+}
+
+// Returns error message string if access is denied, null if allowed
+function roomAccessDenied(user, roomId) {
+  const required = ROOM_GENDER[roomId];
+  if (!required) return null; // no restriction (mixed/general)
+  if (!user) return 'Login required to access this room';
+  const g = normalizeGender(user.gender);
+  if (!g) return 'Please set your gender in your profile to access this room';
+  if (g !== required) {
+    const label = required === 'female' ? 'women' : 'men';
+    return `This room is for ${label} only`;
+  }
+  return null;
+}
+
 // GET /api/posts — community feed (optional user_id and room_id filter)
 router.get('/', optionalAuth, async (req, res) => {
   const { limit = 20, offset = 0, user_id, room_id } = req.query;
+
+  // Gender-restricted room: deny access if gender doesn't match
+  const denied = roomAccessDenied(req.user, room_id);
+  if (denied) return res.status(403).json({ error: denied });
+
   try {
     const params = [parseInt(limit), parseInt(offset)];
     const conditions = [];
@@ -30,6 +61,10 @@ router.get('/', optionalAuth, async (req, res) => {
 router.post('/', requireAuth, async (req, res) => {
   const { content, media_url, media_type, media_name, room_id = 'general' } = req.body;
   if (!content) return res.status(400).json({ error: 'content required' });
+
+  const denied = roomAccessDenied(req.user, room_id);
+  if (denied) return res.status(403).json({ error: denied });
+
   try {
     const { rows } = await db.query(
       `INSERT INTO posts (user_id, content, media_url, media_type, media_name, room_id)
@@ -67,6 +102,12 @@ router.post('/:id/react', requireAuth, async (req, res) => {
   const allowed = ['❤️','🚩','👀','🤮','😂','💪'];
   if (!allowed.includes(emoji)) return res.status(400).json({ error: 'Invalid emoji' });
   try {
+    // Check room access before allowing reaction
+    const { rows: postRows } = await db.query('SELECT room_id FROM posts WHERE id = $1', [req.params.id]);
+    if (postRows.length) {
+      const denied = roomAccessDenied(req.user, postRows[0].room_id);
+      if (denied) return res.status(403).json({ error: denied });
+    }
     const { rows } = await db.query(
       `UPDATE posts
        SET reactions = jsonb_set(
@@ -89,6 +130,12 @@ router.post('/:id/reply', requireAuth, async (req, res) => {
   const { content } = req.body;
   if (!content) return res.status(400).json({ error: 'content required' });
   try {
+    // Check room access before allowing reply
+    const { rows: postRows } = await db.query('SELECT room_id FROM posts WHERE id = $1', [req.params.id]);
+    if (postRows.length) {
+      const denied = roomAccessDenied(req.user, postRows[0].room_id);
+      if (denied) return res.status(403).json({ error: denied });
+    }
     const reply = {
       id: require('uuid').v4(),
       user_id: req.user.id,

@@ -184,10 +184,8 @@ export default function CommunityRoom() {
 
         const requiredGender = restrictions[roomId];
         if (requiredGender) {
-            // Normalize for comparison
-            let userGender = (user.gender || user.user_metadata?.gender || '').toLowerCase();
-
-            // Map Spanish terms
+            // Normalize gender (handles Spanish terms + 'other')
+            let userGender = (user.gender || user.user_metadata?.gender || '').toLowerCase().trim();
             if (userGender === 'mujer') userGender = 'female';
             if (userGender === 'hombre') userGender = 'male';
 
@@ -196,18 +194,21 @@ export default function CommunityRoom() {
                 return;
             }
 
-            // PREVENT FAKE ACCOUNTS: Check AI Verification
-            if (!user.is_verified) {
-                toast.error("Debes verificar tu identidad para entrar a esta sala.");
-                navigate('/verify', { state: { from: '/community' } });
+            // Non-binary/other → redirect to mixed room
+            if (userGender === 'other' || userGender === 'non-binary') {
+                toast.info('Este room es privado. Te redirigimos al Community Hub.');
+                navigate('/community/mixed');
                 return;
             }
 
             if (userGender !== requiredGender) {
-                console.warn('Access Denied. Redirecting...');
-                toast.error(`Acceso restringido: Esta sala es solo para ${requiredGender === 'female' ? 'mujeres' : 'hombres'}.`);
+                const label = requiredGender === 'female' ? 'mujeres' : 'hombres';
+                toast.error(`Acceso restringido: Esta sala es solo para ${label}.`);
                 navigate('/community');
+                return;
             }
+
+            // Gender matches — no extra verification needed
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user, roomId, room, navigate]);
