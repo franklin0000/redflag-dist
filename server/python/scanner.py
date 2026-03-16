@@ -7,7 +7,8 @@ import webbrowser
 import os
 import sys
 from insightface.app import FaceAnalysis
-from deepface import DeepFace
+from PIL import Image
+from PIL.ExifTags import TAGS
 
 INDEX_FILE = 'face_index.faiss'
 METADATA_FILE = 'metadata.pkl'
@@ -144,7 +145,53 @@ def facecheck_search(image_path):
     except Exception as e:
         return [], str(e)
 
-def scan_face(image_path):
+def extract_metadata(image_path):
+    """Extrae metadatos EXIF de la imagen."""
+    meta = {}
+    try:
+        img = Image.open(image_path)
+        exif = img._getexif()
+        if exif:
+            for tag, value in exif.items():
+                decoded = TAGS.get(tag, tag)
+                if isinstance(value, bytes):
+                    continue
+                meta[decoded] = value
+    except:
+        pass
+    return meta
+
+def generate_dorks(name=None, username=None):
+    """Genera Google Dorks basados en el nombre o usuario."""
+    dorks = []
+    query = username if username else name if name else "person"
+    
+    platforms = [
+        {"name": "OnlyFans", "site": "onlyfans.com"},
+        {"name": "Instagram", "site": "instagram.com"},
+        {"name": "Facebook", "site": "facebook.com"},
+        {"name": "Twitter/X", "site": "twitter.com"},
+        {"name": "LinkedIn", "site": "linkedin.com"},
+        {"name": "Escort Sites", "site": "leolist.cc OR skokka.com OR eros.com"},
+    ]
+    
+    for p in platforms:
+        dorks.append({
+            "title": f"Search on {p['name']}",
+            "url": f"https://www.google.com/search?q=site:{p['site']} \"{query}\"",
+            "group": "OSINT Search"
+        })
+    
+    # Dorks de imágenes
+    dorks.append({
+        "title": "Google Image Search (Advanced)",
+        "url": f"https://www.google.com/search?q=\"{query}\" image content:face",
+        "group": "OSINT Search"
+    })
+    
+    return dorks
+
+def scan_face(image_path, username=None):
     """
     Función principal de escaneo. 
     Retorna un dict con match, distancia, atributos o info de búsqueda web.
@@ -246,11 +293,17 @@ def scan_face(image_path):
         elif fc_error:
             api_error = f"{api_error} | FC: {fc_error}" if api_error else f"FC: {fc_error}"
 
+    # 4. OSINT & Metadata
+    file_metadata = extract_metadata(image_path)
+    osint_links = generate_dorks(name=result.get("metadata", {}).get("nombre"), username=username) 
+
     final_response = {
         "ok": True,
         "local_match": result["match"],
         "attributes": attributes,
         "cloud_results": cloud_results,
+        "osint_results": osint_links,
+        "file_metadata": file_metadata,
         "api_debug": api_error if api_error else "Yandex Vision OK"
     }
 

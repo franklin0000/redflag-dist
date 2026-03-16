@@ -4,10 +4,10 @@ import os
 import subprocess
 import time
 
-def process_scanner(img_path):
+def process_scanner(img_path, username=None):
     try:
         from scanner import scan_face
-        res = scan_face(img_path)
+        res = scan_face(img_path, username=username)
         
         results = []
         is_ok = res.get("ok", False)
@@ -41,7 +41,6 @@ def process_scanner(img_path):
                     "imgSrc": hit.get("url"), # This is the thumbnail (URL or base64)
                     "base64": hit.get("url") if hit.get("url", "").startswith("data:image") else None
                 })
-
             # 3. API Error Info (Digital Footprint)
             api_debug = res.get("api_debug")
             if api_debug and api_debug != "Yandex Vision OK":
@@ -53,6 +52,33 @@ def process_scanner(img_path):
                     "icon": "bug_report",
                     "isRisk": False,
                     "isTargetedSearch": False
+                })
+
+            # 4. OSINT Search Results (Footprint Section)
+            osint_hits = res.get("osint_results", [])
+            for hit in osint_hits:
+                results.append({
+                    "score": 80,
+                    "url": hit.get("url"),
+                    "group": hit.get("group", "Footprint"),
+                    "title": hit.get("title", "Search Link"),
+                    "icon": "search",
+                    "isRisk": False,
+                    "isTargetedSearch": True
+                })
+
+            # 5. File Metadata (Information Section)
+            meta = res.get("file_metadata", {})
+            if meta:
+                results.append({
+                    "score": 0,
+                    "url": "#",
+                    "group": "Image Intelligence",
+                    "title": f"Metadata: {meta.get('Make', 'Unknown')} {meta.get('Model', '')}",
+                    "icon": "info",
+                    "isRisk": False,
+                    "isTargetedSearch": False,
+                    "details": meta
                 })
 
         # ALWAYS PROVIDE A FALLBACK if no direct matches found
@@ -154,7 +180,7 @@ if __name__ == "__main__":
     sherlock_results = []
     
     if img_path and img_path != "none":
-        face_results = process_scanner(img_path)
+        face_results = process_scanner(img_path, username=username_query)
         
     if username_query:
         sherlock_results = process_sherlock(username_query)
