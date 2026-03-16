@@ -6,14 +6,23 @@ import time
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
 
+MANUAL_SEARCH_LINKS = [
+    {"title": "Yandex Images", "url": "https://yandex.com/images/", "icon": "travel_explore"},
+    {"title": "FaceCheck.id", "url": "https://facecheck.id/", "icon": "face"},
+    {"title": "TinEye", "url": "https://tineye.com/", "icon": "image_search"},
+    {"title": "Google Images", "url": "https://images.google.com/", "icon": "image_search"},
+    {"title": "PimEyes", "url": "https://pimeyes.com/", "icon": "manage_search"},
+    {"title": "Bing Visual", "url": "https://www.bing.com/visualsearch", "icon": "search"},
+]
+
 def process_scanner(img_path, username=None):
+    results = []
     try:
         from scanner import scan_face
         res = scan_face(img_path, username=username)
-        
-        results = []
+
         is_ok = res.get("ok", False)
-        
+
         if is_ok:
             # 1. Local Match (Emerald Section: Face Match)
             if res.get("local_match"):
@@ -27,11 +36,10 @@ def process_scanner(img_path, username=None):
                     "isTargetedSearch": False,
                     "attributes": res.get("attributes", {})
                 })
-            
+
             # 2. Cloud Search (Emerald Section: Visual Match)
             cloud_hits = res.get("cloud_results", [])
             for hit in cloud_hits:
-                # Use "url" as the image source and "page_url" as the destination link
                 results.append({
                     "score": hit.get("score", 95),
                     "url": hit.get("page_url"),
@@ -40,23 +48,11 @@ def process_scanner(img_path, username=None):
                     "icon": "travel_explore",
                     "isRisk": True,
                     "isTargetedSearch": False,
-                    "imgSrc": hit.get("url"), # This is the thumbnail (URL or base64)
+                    "imgSrc": hit.get("url"),
                     "base64": hit.get("url") if hit.get("url", "").startswith("data:image") else None
                 })
-            # 3. API Error Info (Digital Footprint)
-            api_debug = res.get("api_debug")
-            if api_debug and api_debug != "Yandex Vision OK":
-                results.append({
-                    "score": 0,
-                    "url": "#",
-                    "group": "System Debug",
-                    "title": f"API Status: {api_debug}",
-                    "icon": "bug_report",
-                    "isRisk": False,
-                    "isTargetedSearch": False
-                })
 
-            # 4. OSINT Search Results (Footprint Section)
+            # 3. OSINT Search Results (Footprint Section)
             osint_hits = res.get("osint_results", [])
             for hit in osint_hits:
                 results.append({
@@ -69,7 +65,7 @@ def process_scanner(img_path, username=None):
                     "isTargetedSearch": True
                 })
 
-            # 5. File Metadata (Information Section)
+            # 4. File Metadata (Information Section)
             meta = res.get("file_metadata", {})
             phash = res.get("phash")
             if meta or phash:
@@ -88,24 +84,23 @@ def process_scanner(img_path, username=None):
                     "phash": phash
                 })
 
-        # ALWAYS PROVIDE A FALLBACK if no direct matches found
-        if not results:
-            yandex_url = res.get("web_search_url") if is_ok else f"https://yandex.com/images/search?rpt=imageview&url=manual"
-            results.append({
-                "score": 0,
-                "url": yandex_url,
-                "group": "Deep Search",
-                "title": "Búsqueda Profunda en Internet",
-                "icon": "travel_explore",
-                "isRisk": False,
-                "isTargetedSearch": True,
-                "openNow": True
-            })
-            
-        return results if results else []
     except Exception as e:
         print(f"Error in scanner: {e}", file=sys.stderr)
-        return []
+
+    # ALWAYS add manual search links when an image was provided (regardless of API success)
+    if img_path and img_path != "none":
+        for link in MANUAL_SEARCH_LINKS:
+            results.append({
+                "score": 0,
+                "url": link["url"],
+                "group": "Deep Search",
+                "title": link["title"],
+                "icon": link["icon"],
+                "isRisk": False,
+                "isTargetedSearch": True,
+            })
+
+    return results
 
 def process_sherlock(username):
     # Tries to run sherlock via CLI
