@@ -16,6 +16,7 @@ router.post('/background-check', requireAuth, upload.single('file'), (req, res) 
     env: {
       ...process.env,
       VITE_YANDEX_VISION_KEY: process.env.VITE_YANDEX_VISION_KEY,
+      VITE_FACECHECK_TOKEN: process.env.VITE_FACECHECK_TOKEN,
       YANDEX_FOLDER_ID: process.env.YANDEX_FOLDER_ID || 'b1g5d3bsuqm0ivg26kvg',
       DEBUG_SCANNER: 'true'
     }

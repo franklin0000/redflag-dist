@@ -29,15 +29,17 @@ def process_scanner(img_path):
             # 2. Cloud Search (Emerald Section: Visual Match)
             cloud_hits = res.get("cloud_results", [])
             for hit in cloud_hits:
+                # Use "url" as the image source and "page_url" as the destination link
                 results.append({
-                    "score": 95,
+                    "score": hit.get("score", 95),
                     "url": hit.get("page_url"),
-                    "group": "Visual Match",
-                    "title": f"Public Profile Found (Yandex)",
+                    "group": hit.get("group", "Visual Match"),
+                    "title": hit.get("title", "Public Profile Found"),
                     "icon": "travel_explore",
                     "isRisk": True,
                     "isTargetedSearch": False,
-                    "imgSrc": hit.get("url")
+                    "imgSrc": hit.get("url"), # This is the thumbnail (URL or base64)
+                    "base64": hit.get("url") if hit.get("url", "").startswith("data:image") else None
                 })
 
             # 3. API Error Info (Digital Footprint)

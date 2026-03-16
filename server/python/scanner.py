@@ -13,9 +13,10 @@ INDEX_FILE = 'face_index.faiss'
 METADATA_FILE = 'metadata.pkl'
 THRESHOLD = 0.35
 
-# Yandex Cloud Config (Read from env)
+# API Config (Read from env)
 YANDEX_KEY = os.getenv('VITE_YANDEX_VISION_KEY')
 YANDEX_FOLDER = os.getenv('YANDEX_FOLDER_ID', 'b1g5d3bsuqm0ivg26kvg')
+FACECHECK_TOKEN = os.getenv('VITE_FACECHECK_TOKEN')
 
 # Inicializar InsightFace (buffalo_l)
 print("Cargando InsightFace (buffalo_l)...")
@@ -101,6 +102,48 @@ def yandex_cloud_search(image_path, face_crop_bytes=None):
     except Exception as e:
         return None, str(e)
 
+def facecheck_search(image_path):
+    """
+    Calls FaceCheck.id API (Upload + Poll).
+    Returns items list and error string.
+    """
+    if not FACECHECK_TOKEN:
+        return [], "Missing FaceCheck Token"
+
+    try:
+        # 1. Upload
+        url_upload = "https://facecheck.id/api/upload_pic"
+        headers = {"Authorization": FACECHECK_TOKEN}
+        with open(image_path, "rb") as f:
+            files = {"images": f}
+            res_up = requests.post(url_upload, headers=headers, files=files, timeout=20)
+        
+        if res_up.status_code != 200:
+            return [], f"FaceCheck Upload Error {res_up.status_code}"
+        
+        data_up = res_up.json()
+        id_search = data_up.get("id_search")
+        if not id_search:
+            return [], "FaceCheck ID not returned"
+
+        # 2. Poll (Max 30s for responsiveness)
+        url_search = "https://facecheck.id/api/search"
+        import time
+        for _ in range(15): # 15 iterations * 2s = 30s
+            payload = {"id_search": id_search, "with_progress": True, "status_only": False, "demo": False}
+            res_poll = requests.post(url_search, headers=headers, json=payload, timeout=15)
+            if res_poll.status_code == 200:
+                data_poll = res_poll.json()
+                if data_poll.get("output"):
+                    return data_poll["output"].get("items", []), None
+                if data_poll.get("error"):
+                    return [], data_poll["error"]
+            time.sleep(2)
+        
+        return [], "FaceCheck Timeout"
+    except Exception as e:
+        return [], str(e)
+
 def scan_face(image_path):
     """
     Función principal de escaneo. 
@@ -169,18 +212,18 @@ def scan_face(image_path):
         # USAR EL RECORTE DE LA CARA para la búsqueda en la nube
         cloud_data, api_error = yandex_cloud_search(image_path, face_crop_bytes=face_crop_bytes)
         if cloud_data:
-            # Extraer resultados de IMAGE_COPY_SEARCH
+            # 1. Extraer resultados de IMAGE_COPY_SEARCH de Yandex
             for res in cloud_data.get("results", []):
                 for ann in res.get("results", []):
                     if "imageCopySearch" in ann:
                         copies = ann["imageCopySearch"].get("copyImageResults", [])
-                        for copy in copies[:5]: # Top 5 
+                        for copy in copies[:5]: 
                             cloud_results.append({
                                 "url": copy.get("imageUrl"),
                                 "page_url": copy.get("pageUrl"),
-                                "title": "Búsqueda en la nube (Yandex Cloud)"
+                                "title": "Búsqueda en la nube (Yandex)",
+                                "group": "Visual Match"
                             })
-                    # Mejorar atributos si Yandex detectó cara
                     if "faceDetection" in ann:
                         faces_found = ann["faceDetection"].get("faces", [])
                         if faces_found:
@@ -188,6 +231,20 @@ def scan_face(image_path):
                             if y_attr:
                                 attributes["cloud_gender"] = y_attr.get("gender", {}).get("value")
                                 attributes["cloud_age"] = y_attr.get("age", {}).get("value")
+
+        # NUEVO: Búsqueda en FaceCheck.id para obtener FOTOS REALES
+        fc_items, fc_error = facecheck_search(image_path)
+        if fc_items:
+            for item in fc_items:
+                cloud_results.append({
+                    "url": item.get("base64"), # Miniatura en base64
+                    "page_url": item.get("url"),
+                    "title": "FaceCheck.id Match",
+                    "score": item.get("score", 0),
+                    "group": "Identity Match"
+                })
+        elif fc_error:
+            api_error = f"{api_error} | FC: {fc_error}" if api_error else f"FC: {fc_error}"
 
     final_response = {
         "ok": True,
