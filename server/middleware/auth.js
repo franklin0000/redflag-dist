@@ -11,6 +11,14 @@ function signRefreshToken(userId) {
   return jwt.sign({ sub: userId, type: 'refresh' }, JWT_SECRET, { expiresIn: '30d' });
 }
 
+// Shared query: load user + gender from dating_profiles in one call
+const USER_WITH_GENDER_QUERY = `
+  SELECT u.*, dp.gender
+  FROM users u
+  LEFT JOIN dating_profiles dp ON dp.user_id = u.id
+  WHERE u.id = $1
+`;
+
 async function requireAuth(req, res, next) {
   const header = req.headers.authorization;
   if (!header?.startsWith('Bearer ')) {
@@ -19,7 +27,7 @@ async function requireAuth(req, res, next) {
   const token = header.slice(7);
   try {
     const payload = jwt.verify(token, JWT_SECRET);
-    const { rows } = await db.query('SELECT * FROM users WHERE id = $1', [payload.sub]);
+    const { rows } = await db.query(USER_WITH_GENDER_QUERY, [payload.sub]);
     if (!rows.length) return res.status(401).json({ error: 'User not found' });
     req.user = rows[0];
     next();
@@ -28,12 +36,14 @@ async function requireAuth(req, res, next) {
   }
 }
 
-function optionalAuth(req, res, next) {
+async function optionalAuth(req, res, next) {
   const header = req.headers.authorization;
   if (!header?.startsWith('Bearer ')) return next();
   const token = header.slice(7);
   try {
     const payload = jwt.verify(token, JWT_SECRET);
+    const { rows } = await db.query(USER_WITH_GENDER_QUERY, [payload.sub]);
+    if (rows.length) req.user = rows[0];
     req.userId = payload.sub;
   } catch {}
   next();
