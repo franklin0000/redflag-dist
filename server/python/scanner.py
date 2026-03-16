@@ -59,15 +59,22 @@ def get_yandex_url(image_path):
     search_query = "onlyfans+porn+escort+nsfw"
     return f"https://yandex.com/images/search?text={search_query}"
 
-def yandex_cloud_search(image_path):
-    """Llama a la API de Yandex Cloud Vision para detección y búsqueda de copias."""
+def yandex_cloud_search(image_path, face_crop_bytes=None):
+    """
+    Llama a la API de Yandex Cloud Vision.
+    Si se pasa face_crop_bytes, lo usa en lugar del archivo original.
+    """
     if not YANDEX_KEY:
+        print("Yandex Cloud Error: No API Key", file=sys.stderr)
         return None
     
     import base64
     try:
-        with open(image_path, "rb") as f:
-            encoded_image = base64.b64encode(f.read()).decode('utf-8')
+        if face_crop_bytes:
+            encoded_image = base64.b64encode(face_crop_bytes).decode('utf-8')
+        else:
+            with open(image_path, "rb") as f:
+                encoded_image = base64.b64encode(f.read()).decode('utf-8')
         
         url = "https://vision.api.cloud.yandex.net/vision/v1/batchAnalyze"
         headers = {
@@ -86,16 +93,15 @@ def yandex_cloud_search(image_path):
             }]
         }
         
-        response = requests.post(url, headers=headers, json=payload, timeout=10)
+        response = requests.post(url, headers=headers, json=payload, timeout=15)
         print(f"Yandex Cloud Status: {response.status_code}", file=sys.stderr)
         if response.status_code == 200:
             data = response.json()
-            # print(f"Yandex Cloud Data: {json.dumps(data)}", file=sys.stderr) # Too verbose, leave commented
             return data
         else:
-            print(f"Yandex Cloud Response: {response.text}", file=sys.stderr)
+            print(f"Yandex Cloud Response Error: {response.text}", file=sys.stderr)
     except Exception as e:
-        print(f"Yandex Cloud Error: {e}", file=sys.stderr)
+        print(f"Yandex Cloud Error Exception: {e}", file=sys.stderr)
     return None
 
 def scan_face(image_path):
@@ -116,16 +122,25 @@ def scan_face(image_path):
     if faces:
         face = faces[0]
         emb = face.embedding
-        # InsightFace Buffalo_L extrae género y edad por defecto
-        # gender: 0=F, 1=M (usualmente) -> InsightFace usa [0, 1] o [1, 0]
-        # Pero InsightFace 0.7+ suele tener .gender y .age
-        gender_val = getattr(face, 'gender', None) # 0 for Female, 1 for Male
+        gender_val = getattr(face, 'gender', None)
         age_val = getattr(face, 'age', None)
         
         attributes = {
             "age": int(age_val) if age_val is not None else None,
             "gender": "M" if gender_val == 1 else "F" if gender_val == 0 else "N/A"
         }
+        
+        # Crop face for Yandex Cloud Search
+        try:
+            bbox = face.bbox.astype(int)
+            x1, y1, x2, y2 = bbox
+            x1, y1 = max(0, x1), max(0, y1)
+            y2, x2 = min(img.shape[0], y2), min(img.shape[1], x2)
+            face_img = img[y1:y2, x1:x2]
+            _, buffer = cv2.imencode('.jpg', face_img)
+            face_crop_bytes = buffer.tobytes()
+        except:
+            face_crop_bytes = None
     else:
         # 2. Fallback a DeepFace / ArcFace si falla detección inicial
         print("InsightFace no detectó nada. Usando DeepFace (ArcFace)...")
@@ -154,7 +169,8 @@ def scan_face(image_path):
     # 4. Búsqueda en la nube (Yandex Vision) - Solo si no hay match local
     cloud_results = []
     if not result["match"]:
-        cloud_data = yandex_cloud_search(image_path)
+        # USAR EL RECORTE DE LA CARA para la búsqueda en la nube
+        cloud_data = yandex_cloud_search(image_path, face_crop_bytes=face_crop_bytes)
         if cloud_data:
             # Extraer resultados de IMAGE_COPY_SEARCH
             for res in cloud_data.get("results", []):
