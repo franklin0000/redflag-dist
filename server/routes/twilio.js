@@ -116,4 +116,37 @@ router.post('/voicemail', async (req, res) => {
   res.send(twiml);
 });
 
+// Video Access Token Generation
+// For production stability, uses VideoGrant to authenticate the participant
+router.get('/token', requireAuth, (req, res) => {
+  const { room } = req.query;
+  const identity = req.user.username || req.user.id;
+
+  if (!room) {
+    return res.status(400).json({ error: 'Room name is required' });
+  }
+
+  try {
+    const AccessToken = require('twilio').jwt.AccessToken;
+    const VideoGrant = AccessToken.VideoGrant;
+
+    // Create an Access Token
+    const accessToken = new AccessToken(
+      process.env.TWILIO_ACCOUNT_SID,
+      process.env.TWILIO_API_KEY_SID,
+      process.env.TWILIO_API_KEY_SECRET,
+      { identity: identity }
+    );
+
+    // Create a Video grant and add it to the token
+    const videoGrant = new VideoGrant({ room: room });
+    accessToken.addGrant(videoGrant);
+
+    res.json({ token: accessToken.toJwt() });
+  } catch (err) {
+    console.error('Twilio Token error:', err.message);
+    res.status(500).json({ error: 'Failed to generate access token' });
+  }
+});
+
 module.exports = router;
