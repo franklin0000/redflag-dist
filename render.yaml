@@ -17,7 +17,7 @@ services:
       - key: SUMSUB_SECRET_KEY
         sync: false
       - key: FRONTEND_URL
-        value: https://redflag-app.onrender.com
+        value: https://redflag.web3
     headers:
       - path: /assets/*
         name: Cache-Control
