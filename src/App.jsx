@@ -41,6 +41,7 @@ const LiveDateRadar = React.lazy(() => import('./pages/LiveDateRadar'));
 const SafeRideTracker = React.lazy(() => import('./pages/SafeRideTracker'));
 const RedFlagMap = React.lazy(() => import('./pages/RedFlagMap'));
 const SafetyHistory = React.lazy(() => import('./pages/SafetyHistory'));
+const VideoCall = React.lazy(() => import('./pages/VideoCall'));
 
 import { AuthProvider } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
@@ -245,6 +246,11 @@ function App() {
                     <Route path="/swarm" element={
                       <ProtectedRoute>
                         <SwarmPage />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="/video-call/:roomName?" element={
+                      <ProtectedRoute>
+                        <VideoCall />
                       </ProtectedRoute>
                     } />
                   </Routes>
