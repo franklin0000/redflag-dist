@@ -118,7 +118,7 @@ router.post('/voicemail', async (req, res) => {
 
 // Video Access Token Generation
 // For production stability, uses VideoGrant to authenticate the participant
-router.get('/token', requireAuth, (req, res) => {
+router.get('/token', requireAuth, async (req, res) => {
   const { room } = req.query;
   const identity = req.user.username || req.user.id;
 
@@ -142,7 +142,13 @@ router.get('/token', requireAuth, (req, res) => {
     const videoGrant = new VideoGrant({ room: room });
     accessToken.addGrant(videoGrant);
 
-    res.json({ token: accessToken.toJwt() });
+    // Dynamic ICE Servers for faster connection (Twilio NTS)
+    const iceServers = await twilio.tokens.create();
+
+    res.json({ 
+      token: accessToken.toJwt(),
+      iceServers: iceServers.iceServers
+    });
   } catch (err) {
     console.error('Twilio Token error:', err.message);
     res.status(500).json({ error: 'Failed to generate access token' });

@@ -11,44 +11,35 @@ export async function connectToVideoRoom(roomName) {
     const response = await fetch(`${import.meta.env.VITE_API_URL}/api/twilio/token?room=${roomName}`, {
         headers: { Authorization: `Bearer ${getToken()}` }
     });
-    const { token } = await response.json();
+    const { token, iceServers } = await response.json();
 
-    // 2. Advanced Connection Options
+    // 2. Advanced Connection Options - Optimized for SPEED
     const connectOptions = {
         name: roomName,
         audio: true,
         video: { width: 640 },
         
         /**
-         * CUSTOM TURN SERVERS CONFIGURATION
-         * Crucial for mobile networks (4G/5G) where symmetric NAT often blocks P2P.
+         * STUN/TURN Optimization
+         * Using Dynamic ICE servers from backend Network Traversal Service
          */
-        iceServers: [
-            {
-                urls: 'stun:global.stun.twilio.com:3478?transport=udp'
-            },
-            {
-                urls: [
-                    'turn:global.turn.twilio.com:3478?transport=udp',
-                    'turn:global.turn.twilio.com:3478?transport=tcp',
-                    'turn:global.turn.twilio.com:443?transport=tcp'
-                ],
-                username: 'your-twilio-username-or-token', // Backend usually provides this or uses twilio token
-                credential: 'your-twilio-password'
-            }
-        ],
+        iceServers: iceServers,
+        iceTransportPolicy: 'all', // Try P2P first, then relay
+        maxIceGatheringTimeout: 8000, // Reduced from 15s to 8s for faster startup
+        
+        // Speed up negotiation
+        preferredVideoCodecs: [{ codec: 'VP8' }], // VP8 is fastest to initialize
         
         // Quality & Stability settings
         bandwidthProfile: {
             video: {
                 mode: 'collaboration',
-                maxTracks: 10,
                 dominantSpeakerPriority: 'high'
             }
         },
-        maxAudioBitrate: 16000, // Optimize for mobile bandwidth
+        maxAudioBitrate: 16000, 
         networkQuality: {
-            local: 1, // detail level
+            local: 1,
             remote: 1
         }
     };
