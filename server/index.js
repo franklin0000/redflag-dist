@@ -10,8 +10,17 @@ const fetch = require('node-fetch');
 const app = express();
 const server = http.createServer(app);
 const ALLOWED_ORIGIN = process.env.FRONTEND_URL || 'https://redflag-source.onrender.com';
+const WEB3_DOMAINS = [
+  'https://redflag.brave', 'https://www.redflag.brave',
+  'https://redflag.og', 'https://www.redflag.og',
+  'https://redflag.u', 'https://www.redflag.u',
+  'https://redflag.web3', 'https://www.redflag.web3'
+];
 const io = new SocketIO(server, {
-  cors: { origin: [ALLOWED_ORIGIN, 'http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175'], methods: ['GET', 'POST'] },
+  cors: { 
+    origin: [ALLOWED_ORIGIN, 'http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175', ...WEB3_DOMAINS], 
+    methods: ['GET', 'POST'] 
+  },
 });
 
 const PORT = process.env.PORT || 3001;
@@ -19,7 +28,10 @@ const db = require('./db');
 const { JWT_SECRET } = require('./middleware/auth');
 const jwt = require('jsonwebtoken');
 
-app.use(cors({ origin: [ALLOWED_ORIGIN, 'http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175'], credentials: true }));
+app.use(cors({ 
+  origin: [ALLOWED_ORIGIN, 'http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175', ...WEB3_DOMAINS], 
+  credentials: true 
+}));
 app.use(express.json({ limit: '10mb' }));
 
 // ── Serve React frontend (dist/) ──────────────────────────────
