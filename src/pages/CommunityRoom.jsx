@@ -146,10 +146,22 @@ export default function CommunityRoom() {
                 return [mapped, ...prev];
             });
         };
+        const onReactionUpdated = ({ postId, reactions }) => {
+            setPosts(prev => prev.map(p => p.id === postId ? { ...p, reactions } : p));
+        };
+        const onReplyAdded = ({ postId, reply }) => {
+            const mappedReply = { ...reply, timestamp: new Date(reply.timestamp || reply.created_at) };
+            setPosts(prev => prev.map(p => p.id === postId ? { ...p, replies: [...(p.replies || []), mappedReply] } : p));
+        };
+
         socket?.on('new_community_post', onNewPost);
+        socket?.on('post_reaction_updated', onReactionUpdated);
+        socket?.on('post_reply_added', onReplyAdded);
 
         return () => {
             socket?.off('new_community_post', onNewPost);
+            socket?.off('post_reaction_updated', onReactionUpdated);
+            socket?.off('post_reply_added', onReplyAdded);
         };
     }, [roomId, room]);
 
