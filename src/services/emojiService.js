@@ -123,7 +123,7 @@ export const emojiService = {
     /**
      * Get User Emojis
      */
-    getUserEmojis: async (userId) => {
+    getUserEmojis: async () => {
         try {
             const data = await apiRequest('/api/emojis');
             return data || [];

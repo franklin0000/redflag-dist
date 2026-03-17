@@ -255,7 +255,7 @@ export default function Alerts() {
 
                             {/* Blurred Visual Area */}
                             <div className="relative w-full h-64 bg-gray-900 overflow-hidden mx-auto">
-                                <img alt="Blurred person" className="w-full h-full object-cover opacity-60 blur-xl scale-110" src={alert.image || 'https://via.placeholder.com/400x300'} />
+                                <img alt="Blurred person" className="w-full h-full object-cover opacity-60 blur-xl scale-110" src={alert.image || 'https://placehold.co/400x300'} />
                                 <div className="absolute inset-0 flex flex-col items-center justify-center z-10">
                                     <div className="h-12 w-12 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center border border-white/10 mb-2">
                                         <span className="material-icons text-white text-2xl">visibility_off</span>

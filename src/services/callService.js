@@ -125,7 +125,7 @@ export const callService = {
     s.emit('join_video_call', matchId);
 
     // Backend generates exclusive token for privacy validations
-    s.on('call_token_assigned', ({ token, room }) => {
+    s.on('call_token_assigned', ({ room }) => {
       console.log(`Joined private call room ${room} securely`);
     });
 

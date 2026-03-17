@@ -253,7 +253,7 @@ export default function Home() {
                 </button>
 
                 <button
-                    onClick={() => navigate('/community/mixed')}
+                    onClick={() => navigate('/community/general')}
                     className="p-4 bg-gradient-to-br from-blue-500/10 to-indigo-500/10 border border-blue-500/20 rounded-xl flex flex-col items-center justify-center gap-2 hover:bg-blue-500/20 transition-all group"
                 >
                     <div className="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center group-hover:scale-110 transition-transform">
@@ -426,7 +426,7 @@ function RecentReportsList() {
             <img
                 alt={report.reported_name || report.name || 'Report'}
                 className="w-full h-full object-cover opacity-60 group-hover:opacity-40 transition-opacity blur-[2px]"
-                src={(report.evidence_urls || report.photos || []).length > 0 ? (report.evidence_urls || report.photos)[0] : 'https://via.placeholder.com/150'}
+                src={(report.evidence_urls || report.photos || []).length > 0 ? (report.evidence_urls || report.photos)[0] : 'https://placehold.co/150'}
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent p-3 flex flex-col justify-end">
                 <div className="bg-orange-500/20 text-orange-400 text-[10px] font-bold px-2 py-0.5 rounded w-max mb-1 border border-orange-500/30">

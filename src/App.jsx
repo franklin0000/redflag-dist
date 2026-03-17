@@ -115,6 +115,7 @@ function App() {
                         </PremiumGate>
                       } />
                       <Route path="community" element={<CommunityHub />} />
+                      <Route path="community/:roomId" element={<CommunityRoom />} />
                       <Route path="map" element={<RedFlagMap />} />
                       <Route path="chat" element={<ChatLobby />} />
                       <Route path="alerts" element={<Alerts />} />
@@ -227,11 +228,6 @@ function App() {
                     <Route path="/report/:id" element={
                       <ProtectedRoute>
                         <ReportDetail />
-                      </ProtectedRoute>
-                    } />
-                    <Route path="/community/:roomId" element={
-                      <ProtectedRoute>
-                        <CommunityRoom />
                       </ProtectedRoute>
                     } />
                     <Route path="/profile/:userId" element={

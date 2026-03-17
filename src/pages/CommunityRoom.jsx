@@ -22,7 +22,7 @@ const ROOM_CONFIG = {
         accentBg: 'bg-blue-500/10',
         accentText: 'text-blue-500',
     },
-    mixed: {
+    general: {
         name: 'Community Hub',
         icon: 'groups',
         gradient: 'from-purple-500 to-primary',
@@ -209,7 +209,7 @@ export default function CommunityRoom() {
             // Step 2 — non-binary → redirect to mixed room
             if (userGender === 'other' || userGender === 'non-binary') {
                 toast.info('Este room es privado. Te redirigimos al Community Hub.');
-                navigate('/community/mixed');
+                navigate('/community/general');
                 return;
             }
 
@@ -232,10 +232,6 @@ export default function CommunityRoom() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user, roomId, room, navigate]);
 
-    if (!room) {
-        navigate('/community');
-        return null; // Return null if redirecting to prevent render
-    }
 
     const handleReact = async (postId, emoji) => {
         const key = `${postId}_${emoji}`;
@@ -430,23 +426,12 @@ export default function CommunityRoom() {
         setVerifying(true);
         setVerifyError(null);
         try {
-            const form = new FormData();
-            form.append('selfie', capturedBlob, 'selfie.jpg');
-            const res = await fetch('/api/users/verify-gender', {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
-                body: form
-            });
-            const data = await res.json();
-            if (!res.ok) {
-                setVerifyError(data.error || 'Verification failed');
-            } else {
-                setVerifyModalOpen(false);
-                toast.success('¡Identidad verificada! Bienvenida/o.');
-                window.location.reload();
-            }
-        } catch {
-            setVerifyError('Error de red. Por favor intenta de nuevo.');
+            await usersApi.verifyGenderSelfie(capturedBlob);
+            setVerifyModalOpen(false);
+            toast.success('¡Identidad verificada! Bienvenida/o.');
+            window.location.reload();
+        } catch (err) {
+            setVerifyError(err.message || 'Error de verificación. Por favor intenta de nuevo.');
         } finally {
             setVerifying(false);
         }
@@ -472,6 +457,11 @@ export default function CommunityRoom() {
             console.error(e);
         }
     };
+
+    if (!room) {
+        navigate('/community');
+        return null; 
+    }
 
     return (
         <div className="bg-background-light dark:bg-background-dark min-h-screen font-display text-gray-900 dark:text-gray-100 flex flex-col">

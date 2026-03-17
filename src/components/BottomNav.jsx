@@ -20,7 +20,7 @@ export default function BottomNav() {
             <div className="flex justify-around items-center h-16 px-2 relative">
                 {/* Animated active indicator */}
                 <div
-                    className="absolute top-0 h-0.5 bg-primary rounded-full transition-all duration-300 ease-out"
+                    className="absolute top-0 h-0.5 bg-primary rounded-full transition-all duration-300 ease-out pointer-events-none"
                     style={{
                         width: '16.66%',
                         left: activeIndex >= 3

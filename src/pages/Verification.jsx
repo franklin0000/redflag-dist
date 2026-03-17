@@ -4,30 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { usersApi } from '../services/api';
 import { useToast } from '../context/ToastContext';
 
-// Face analysis via Express backend (with 5s timeout for resilience)
-async function analyzeSelfieFace(base64DataUrl) {
-    try {
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 5000);
-        const token = localStorage.getItem('rf_token');
-        const response = await fetch('/api/verify/analyze-face', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                ...(token ? { Authorization: `Bearer ${token}` } : {}),
-            },
-            body: JSON.stringify({ image: base64DataUrl }),
-            signal: controller.signal,
-        });
-        clearTimeout(timer);
-        if (!response.ok) return { ok: false, gender: null, faceCount: 0 };
-        const data = await response.json();
-        return { ok: true, gender: data.gender ?? null, faceCount: data.faceCount ?? 1 };
-    } catch {
-        // Network error, timeout, or endpoint not available — skip analysis gracefully
-        return { ok: false, gender: null, faceCount: 0 };
-    }
-}
+// Face analysis handled via usersApi
 
 export default function Verification() {
     const { user, refreshUser } = useAuth();
@@ -90,12 +67,17 @@ export default function Verification() {
     };
 
     const submitFace = async () => {
-        if (!capturedImage || !user?.id) return;
+        if (!capturedImage) return;
         setIsProcessing(true);
 
         try {
-            // Analyze selfie via Yandex Vision Edge Function
-            const { ok, gender: detectedGender, faceCount } = await analyzeSelfieFace(capturedImage);
+            // Analyze selfie via backend
+            const result = await usersApi.analyzeFace(capturedImage);
+            const { ok, gender: detectedGender, faceCount } = {
+                ok: true,
+                gender: result.gender ?? null,
+                faceCount: result.faceCount ?? 1
+            };
 
             if (ok && faceCount === 0) {
                 toast.error("No detectamos un rostro. Asegúrate de que tu cara esté bien iluminada.");

@@ -98,6 +98,12 @@ export const usersApi = {
   getUser: (id) => request(`/api/users/${id}`),
   updateMe: (data) => request('/api/users/me', { method: 'PATCH', body: JSON.stringify(data) }),
   verifyIdentity: (gender) => request('/api/users/me/verify', { method: 'POST', body: JSON.stringify({ gender }) }),
+  analyzeFace: (base64) => request('/api/verify/analyze-face', { method: 'POST', body: JSON.stringify({ image: base64 }) }),
+  verifyGenderSelfie: (blob) => {
+    const formData = new FormData();
+    formData.append('selfie', blob, 'selfie.jpg');
+    return request('/api/users/verify-gender', { method: 'POST', body: formData });
+  },
   updateSubscription: (isPaid) =>
     request('/api/users/me/subscription', {
       method: 'PATCH',

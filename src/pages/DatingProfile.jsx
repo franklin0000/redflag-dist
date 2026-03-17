@@ -98,7 +98,7 @@ export default function DatingProfile() {
                 bio,
                 age: parseInt(age),
                 gender: gender || null,
-                photos: photos.length > 0 ? photos : ['https://via.placeholder.com/400x600?text=No+Photo'],
+                photos: photos.length > 0 ? photos : ['https://placehold.co/400x600?text=No+Photo'],
                 interests,
                 location: locationLabel || null,
                 lat: coords.lat,

@@ -36,7 +36,7 @@ const ROOMS = [
         latestPost: '"Bro, run a background check first. Saved me from a crazy situation..."',
     },
     {
-        id: 'mixed',
+        id: 'general',
         name: 'Community Hub',
         subtitle: 'Open to all • Together we\'re stronger',
         icon: 'groups',

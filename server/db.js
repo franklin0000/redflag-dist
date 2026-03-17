@@ -49,15 +49,40 @@ pool.query(`
   $$ LANGUAGE plpgsql;
 `).catch(err => console.error('Migration error (get_matches_by_distance):', err.message));
 
-// Auto-migrate: add room_id to posts, expires_at to messages
-pool.query(`ALTER TABLE posts ADD COLUMN IF NOT EXISTS room_id TEXT DEFAULT 'general'`).catch(() => { });
-pool.query(`CREATE INDEX IF NOT EXISTS idx_posts_room ON posts(room_id, created_at DESC)`).catch(() => { });
-pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ DEFAULT (NOW() + INTERVAL '24 hours')`).catch(() => { });
+const runMigrations = async () => {
+  try {
+    // Auto-migrate: add columns to posts
+    await pool.query(`ALTER TABLE posts ADD COLUMN IF NOT EXISTS room_id TEXT DEFAULT 'general'`);
+    await pool.query(`ALTER TABLE posts ADD COLUMN IF NOT EXISTS media_url TEXT`);
+    await pool.query(`ALTER TABLE posts ADD COLUMN IF NOT EXISTS media_type TEXT`);
+    await pool.query(`ALTER TABLE posts ADD COLUMN IF NOT EXISTS media_name TEXT`);
+    await pool.query(`ALTER TABLE posts ADD COLUMN IF NOT EXISTS reactions JSONB DEFAULT '{}'`);
+    await pool.query(`ALTER TABLE posts ADD COLUMN IF NOT EXISTS replies JSONB DEFAULT '[]'`);
+    await pool.query(`UPDATE posts SET room_id = 'general' WHERE room_id = 'mixed'`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_posts_room ON posts(room_id, created_at DESC)`);
+    await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ DEFAULT (NOW() + INTERVAL '24 hours')`);
+    console.log('✅ DB Migrations completed');
+  } catch (err) {
+    console.error('❌ Migration error:', err.message);
+  }
+};
+
+runMigrations();
 
 // Auto-migrate dating columns
 pool.query(`ALTER TABLE dating_profiles ADD COLUMN IF NOT EXISTS looking_for TEXT`).catch(() => { });
 pool.query(`ALTER TABLE dating_profiles ADD COLUMN IF NOT EXISTS gender TEXT`).catch(() => { });
 pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS gender TEXT`).catch(() => { });
+pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS wallet_address TEXT`).catch(() => { });
+pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS photo_url TEXT`).catch(() => { });
+pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS settings JSONB DEFAULT '{}'`).catch(() => { });
+pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token TEXT`).catch(() => { });
+pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token_exp TIMESTAMPTZ`).catch(() => { });
+
+// Gender verification columns
+pool.query(`ALTER TABLE dating_profiles ADD COLUMN IF NOT EXISTS gender_verified BOOLEAN DEFAULT FALSE`).catch(() => { });
+pool.query(`ALTER TABLE dating_profiles ADD COLUMN IF NOT EXISTS gender_verified_at TIMESTAMPTZ`).catch(() => { });
+pool.query(`ALTER TABLE dating_profiles ADD COLUMN IF NOT EXISTS gender_confidence NUMERIC(5,2)`).catch(() => { });
 
 // Auto-migrate: ensure comments table exists
 pool.query(`
@@ -131,6 +156,12 @@ pool.query(`
     created_at TIMESTAMPTZ DEFAULT NOW()
   )
 `).catch(err => console.error('Migration error (location_flags):', err.message));
+
+// Extra tables: blocked_users, muted_chats, anon_messages, custom_emojis
+pool.query(`CREATE TABLE IF NOT EXISTS blocked_users (blocker_id UUID REFERENCES users(id) ON DELETE CASCADE, blocked_id UUID REFERENCES users(id) ON DELETE CASCADE, created_at TIMESTAMPTZ DEFAULT NOW(), PRIMARY KEY (blocker_id, blocked_id))`).catch(() => { });
+pool.query(`CREATE TABLE IF NOT EXISTS muted_chats (user_id UUID REFERENCES users(id) ON DELETE CASCADE, match_id TEXT NOT NULL, created_at TIMESTAMPTZ DEFAULT NOW(), PRIMARY KEY (user_id, match_id))`).catch(() => { });
+pool.query(`CREATE TABLE IF NOT EXISTS anon_messages (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), room TEXT NOT NULL, text TEXT NOT NULL, nickname TEXT, avatar TEXT, attachment TEXT, type TEXT DEFAULT 'text', created_at TIMESTAMPTZ DEFAULT NOW())`).catch(() => { });
+pool.query(`CREATE TABLE IF NOT EXISTS custom_emojis (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), user_id UUID REFERENCES users(id) ON DELETE CASCADE, name TEXT NOT NULL, layers JSONB NOT NULL, svg_content TEXT, created_at TIMESTAMPTZ DEFAULT NOW())`).catch(() => { });
 
 module.exports = {
   query: (text, params) => pool.query(text, params),
