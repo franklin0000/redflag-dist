@@ -79,7 +79,7 @@ function distKm(lat1, lng1, lat2, lng2) {
 // ── Foursquare Search (via server proxy — no CORS issues) ─────────────────
 
 async function searchFoursquare(lat, lng, type = 'all', keyword = '') {
-  const params = new URLSearchParams({ lat, lng, type, keyword, radius: '5000', limit: '60' });
+  const params = new URLSearchParams({ lat, lng, type, keyword, radius: '5000', limit: '100' });
   const res = await fetch(`${API_BASE}/api/places/search?${params}`);
   if (!res.ok) throw new Error(`Places API ${res.status}`);
   const data = await res.json();
