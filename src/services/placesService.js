@@ -206,18 +206,16 @@ async function searchMapbox(lat, lng, type = 'cafe', keyword = '') {
 
 export const placesService = {
   searchSafePlaces: async (lat, lng, type = 'all', keyword = '') => {
-    // 1. Try Foursquare first (real data)
-    if (FSQ_KEY) {
-      try {
-        const raw = await searchFoursquare(lat, lng, type, keyword);
-        if (raw.length > 0) {
-          return raw
-            .map((p, i) => transformFsqPlace(p, i, lat, lng, keyword))
-            .sort((a, b) => (b.safetyScore - a.safetyScore));
-        }
-      } catch (err) {
-        console.warn('Foursquare failed, trying Mapbox fallback:', err.message);
+    // 1. Try server proxy → Foursquare (real data, no CORS)
+    try {
+      const raw = await searchFoursquare(lat, lng, type, keyword);
+      if (raw.length > 0) {
+        return raw
+          .map((p, i) => transformFsqPlace(p, i, lat, lng, keyword))
+          .sort((a, b) => (b.safetyScore - a.safetyScore));
       }
+    } catch (err) {
+      console.warn('Foursquare proxy failed, trying Mapbox fallback:', err.message);
     }
 
     // 2. Mapbox fallback
