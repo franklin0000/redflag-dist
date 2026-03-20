@@ -30,8 +30,6 @@ services:
         sync: false
       - key: STRIPE_SECRET_KEY
         sync: false
-      - key: STRIPE_WEBHOOK_SECRET
-        sync: false
       - key: SUMSUB_APP_TOKEN
         sync: false
       - key: SUMSUB_SECRET_KEY
