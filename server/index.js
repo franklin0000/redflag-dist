@@ -28,10 +28,64 @@ const db = require('./db');
 const { JWT_SECRET } = require('./middleware/auth');
 const jwt = require('jsonwebtoken');
 
-app.use(cors({ 
-  origin: [ALLOWED_ORIGIN, 'http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175', ...WEB3_DOMAINS], 
-  credentials: true 
+app.use(cors({
+  origin: [ALLOWED_ORIGIN, 'http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175', ...WEB3_DOMAINS],
+  credentials: true
 }));
+
+// ── Stripe Webhook (raw body MUST come before express.json) ───
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY || 'sk_test_placeholder');
+app.post('/api/webhook/stripe',
+  express.raw({ type: 'application/json' }),
+  async (req, res) => {
+    const sig = req.headers['stripe-signature'];
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+    if (!webhookSecret) return res.status(200).json({ received: true }); // dev mode
+    let event;
+    try {
+      event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
+    } catch (err) {
+      console.error('Stripe webhook signature failed:', err.message);
+      return res.status(400).send(`Webhook Error: ${err.message}`);
+    }
+    try {
+      switch (event.type) {
+        case 'payment_intent.succeeded': {
+          const pi = event.data.object;
+          // Mark user subscription as paid if metadata contains userId
+          if (pi.metadata?.userId) {
+            await db.query(
+              'UPDATE users SET is_paid = TRUE WHERE id = $1',
+              [pi.metadata.userId]
+            );
+            console.log(`✅ Stripe: user ${pi.metadata.userId} marked as paid`);
+          }
+          break;
+        }
+        case 'customer.subscription.deleted':
+        case 'customer.subscription.updated': {
+          const sub = event.data.object;
+          if (sub.metadata?.userId) {
+            const isPaid = sub.status === 'active' || sub.status === 'trialing';
+            await db.query(
+              'UPDATE users SET is_paid = $1 WHERE id = $2',
+              [isPaid, sub.metadata.userId]
+            );
+            console.log(`✅ Stripe: subscription ${sub.status} for user ${sub.metadata.userId}`);
+          }
+          break;
+        }
+        default:
+          // Ignore unhandled event types
+          break;
+      }
+    } catch (err) {
+      console.error('Stripe webhook handler error:', err.message);
+    }
+    res.json({ received: true });
+  }
+);
+
 app.use(express.json({ limit: '10mb' }));
 
 // ── Serve React frontend (dist/) ──────────────────────────────
@@ -48,6 +102,21 @@ app.use(express.static(DIST, {
 
 // ── Health check ──────────────────────────────────────────────
 app.get('/health', (req, res) => res.json({ status: 'ok', version: '2.0' }));
+
+// ── Handshake / Web3 domain verification ──────────────────────
+// Serves the IPFS CID and HIP-2 record for .web3 / .brave / .og / .u resolution.
+// Gateways like hns.to, Fingertip, and Brave read this to verify ownership.
+app.get('/.well-known/wallets', (_req, res) => {
+  res.json({
+    ERC20: process.env.VITE_DONATION_ADDRESS || '',
+  });
+});
+
+app.get('/.well-known/security.txt', (_req, res) => {
+  res.type('text/plain').send(
+    `Contact: mailto:security@redflag.app\nExpires: 2027-01-01T00:00:00.000Z\nPreferred-Languages: en, es\n`
+  );
+});
 
 // ── FaceCheck.id Proxy (production) ───────────────────────────
 // In dev, Vite proxies these paths directly to facecheck.id.
@@ -128,7 +197,6 @@ app.post('/api/verify/analyze-face', require('./middleware/auth').requireAuth, (
 });
 
 // ── Stripe PaymentIntent ──────────────────────────────────────
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY || 'sk_test_placeholder');
 app.post('/api/payment-intent', require('./middleware/auth').requireAuth, async (req, res) => {
   const { amount, currency = 'usd', paymentMethodId } = req.body;
   if (!amount || !paymentMethodId)
@@ -137,7 +205,7 @@ app.post('/api/payment-intent', require('./middleware/auth').requireAuth, async 
     const pi = await stripe.paymentIntents.create({
       amount, currency, payment_method: paymentMethodId,
       confirmation_method: 'manual', confirm: true,
-      return_url: process.env.FRONTEND_URL || 'https://redflag-app.onrender.com',
+      return_url: process.env.FRONTEND_URL || 'https://redflag-source.onrender.com',
     });
     if (pi.status === 'requires_action')
       return res.json({ clientSecret: pi.client_secret, requiresAction: true });

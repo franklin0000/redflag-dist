@@ -12,21 +12,44 @@ services:
       - www.redflag.u
       - redflag.web3
       - www.redflag.web3
-    buildCommand: npm install && npm run build && cd server && npm install && pip install -r python/requirements.txt
+    buildCommand: npm install --include=dev && npm run build && cd server && npm install
     startCommand: node server/index.js
     envVars:
       - key: PORT
         value: 10000
       - key: NODE_ENV
         value: production
+      - key: FRONTEND_URL
+        value: https://redflag-source.onrender.com
+      # ── Secrets (set manually in Render dashboard) ─────────────
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: REDIS_URL
+        sync: false
       - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
         sync: false
       - key: SUMSUB_APP_TOKEN
         sync: false
       - key: SUMSUB_SECRET_KEY
         sync: false
-      - key: FRONTEND_URL
-        value: https://redflag.web3
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_API_KEY_SID
+        sync: false
+      - key: TWILIO_API_KEY_SECRET
+        sync: false
     headers:
       - path: /assets/*
         name: Cache-Control
