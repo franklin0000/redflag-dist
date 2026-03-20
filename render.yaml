@@ -55,3 +55,5 @@ services:
       - path: /*
         name: Cache-Control
         value: public, max-age=0, must-revalidate
+      - key: TWILIO_PHONE_NUMBER
+        sync: false
