@@ -160,6 +160,7 @@ app.use('/api/stats', require('./routes/stats'));
 const locationFlagsRouter = require('./routes/locationFlags');
 app.use('/api/location-flags', locationFlagsRouter);
 app.use('/api/uber', require('./routes/uber'));
+app.use('/api/saferide', require('./routes/saferide'));
 app.use('/api/contacts', require('./routes/contacts'));
 app.use('/api/emojis', require('./routes/emojis'));
 const guardianRouter = require('./routes/guardian');

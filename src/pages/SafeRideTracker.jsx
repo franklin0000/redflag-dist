@@ -67,7 +67,7 @@ export default function SafeRideTracker() {
         if (isSender || ride?.status !== 'en_route') return;
 
         // Start sharing GPS
-        gpsCleanup.current = safeRideService.startGpsSharing(sessionId, null /* socket optional */);
+        gpsCleanup.current = safeRideService.startGpsSharing(sessionId);
         return () => { gpsCleanup.current?.(); };
     }, [isSender, ride?.status, sessionId]);
 
@@ -102,10 +102,11 @@ export default function SafeRideTracker() {
 
     // ── Open Uber with pre-filled pickup + destination ────────────────────
     const handleOpenUber = () => {
-        if (!pickupCoords || !ride) return;
+        const pCoords = pickupCoords || (ride?.pickup_lat ? { lat: ride.pickup_lat, lng: ride.pickup_lng, address: ride.pickup_address } : null);
+        if (!pCoords || !ride) return;
 
         const uberUrl = safeRideService.getUberDeepLink(
-            pickupCoords.lat, pickupCoords.lng, pickupCoords.address,
+            pCoords.lat, pCoords.lng, pCoords.address,
             ride.dest_lat, ride.dest_lng, ride.dest_name, ride.dest_address
         );
 
@@ -133,7 +134,9 @@ export default function SafeRideTracker() {
     );
 
     const showPickupForm  = !isSender && ride.status === 'requested';
-    const showUberButton  = !isSender && ride.status === 'pickup_ready' && pickupCoords;
+    // Show Uber button if pickup is ready — use local coords OR coords saved in DB
+    const pickupForUber   = pickupCoords || (ride.pickup_lat ? { lat: ride.pickup_lat, lng: ride.pickup_lng, address: ride.pickup_address } : null);
+    const showUberButton  = !isSender && ride.status === 'pickup_ready' && pickupForUber;
     const showWaiting     = isSender  && (ride.status === 'requested' || ride.status === 'pickup_ready');
 
     return (
@@ -214,7 +217,7 @@ export default function SafeRideTracker() {
                                 <span className="material-icons text-blue-400 text-lg mt-0.5">trip_origin</span>
                                 <div>
                                     <p className="text-xs text-gray-500 font-bold uppercase">Pickup</p>
-                                    <p className="text-sm text-white">{pickupCoords.address}</p>
+                                    <p className="text-sm text-white">{pickupForUber?.address}</p>
                                 </div>
                             </div>
                             <div className="flex items-start gap-3">
@@ -240,7 +243,7 @@ export default function SafeRideTracker() {
 
                         {/* Change address option */}
                         <button
-                            onClick={() => { setPickupCoords(null); safeRideService.acceptRide(sessionId, '', null, null).catch(() => {}); }}
+                            onClick={() => { setPickupCoords(null); safeRideService.acceptRide(sessionId, '', null, null).then(() => {}).catch(() => {}); }}
                             className="mt-4 text-xs text-gray-500 hover:text-gray-300 underline"
                         >
                             Change pickup address
