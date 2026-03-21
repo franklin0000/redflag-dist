@@ -152,7 +152,7 @@ export default function MatchProfile() {
           <div className="flex flex-wrap gap-3 text-sm">
             <div className={`flex items-center gap-1.5 font-bold ${tier.color}`}>
               <span className="material-icons text-base">flag</span>
-              <span className={tier.label}</span>
+              <span>{tier.label}</span>
             </div>
             <div className={`flex items-center gap-1.5 ${redFlagCount > 0 ? 'text-red-400' : 'text-gray-400'}`}>
               <span className="material-icons text-base">report</span>
