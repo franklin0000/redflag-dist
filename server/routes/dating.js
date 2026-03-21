@@ -40,17 +40,17 @@ async function resolveMatchId(rawId, userId = null) {
 router.get('/profile/:userId', requireAuth, async (req, res) => {
   const { userId } = req.params;
   try {
-    // Dating profile + user info
+    // LEFT JOIN so basic user info always returns even without a dating profile
     const { rows } = await db.query(
       `SELECT u.id, u.name, u.photo_url, u.is_verified,
               dp.age, dp.bio, dp.photos, dp.interests, dp.safety_score,
               dp.location, dp.gender, dp.gender_verified
-       FROM dating_profiles dp
-       JOIN users u ON u.id = dp.user_id
-       WHERE dp.user_id = $1`,
+       FROM users u
+       LEFT JOIN dating_profiles dp ON dp.user_id = u.id
+       WHERE u.id = $1`,
       [userId]
     );
-    if (!rows.length) return res.status(404).json({ error: 'Profile not found' });
+    if (!rows.length) return res.status(404).json({ error: 'User not found' });
     const profile = rows[0];
 
     // Reports filed against them (red flag count)

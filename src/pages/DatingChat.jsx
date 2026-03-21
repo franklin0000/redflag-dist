@@ -287,7 +287,9 @@ export default function DatingChat() {
 
     const handleViewProfile = () => {
         setShowChatMenu(false);
-        navigate(`/dating/profile/${targetUserId}`);
+        navigate(`/dating/profile/${targetUserId}`, {
+            state: { name: match?.name, photo: match?.photo },
+        });
     };
 
     const handleBlockUser = async () => {

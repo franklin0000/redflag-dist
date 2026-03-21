@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
@@ -16,6 +16,10 @@ async function fetchMatchProfile(userId) {
 export default function MatchProfile() {
   const { userId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Use name/photo passed via navigation state for instant display while loading
+  const hint = location.state || {};
 
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -28,15 +32,20 @@ export default function MatchProfile() {
   }, [userId]);
 
   if (loading) return (
-    <div className="h-screen bg-gray-900 text-white flex items-center justify-center">
-      <div className="w-8 h-8 border-4 border-gray-600 border-t-white rounded-full animate-spin" />
+    <div className="h-screen bg-gray-900 text-white flex flex-col items-center justify-center gap-3">
+      {hint.photo
+        ? <img src={hint.photo} alt={hint.name} className="w-20 h-20 rounded-full object-cover border-2 border-gray-600" />
+        : <div className="w-20 h-20 rounded-full bg-gray-700 flex items-center justify-center text-3xl font-bold">{hint.name?.[0] || '?'}</div>
+      }
+      {hint.name && <p className="font-bold text-lg">{hint.name}</p>}
+      <div className="w-6 h-6 border-4 border-gray-600 border-t-white rounded-full animate-spin mt-2" />
     </div>
   );
 
   if (!profile) return (
     <div className="h-screen bg-gray-900 text-white flex flex-col items-center justify-center gap-4 p-6 text-center">
       <span className="material-icons text-5xl text-gray-600">person_off</span>
-      <p className="text-gray-400">This profile is not available.</p>
+      <p className="text-gray-400">Profile not available.</p>
       <button onClick={() => navigate(-1)} className="text-blue-400 underline text-sm">Go back</button>
     </div>
   );
