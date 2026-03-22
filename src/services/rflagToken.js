@@ -6,9 +6,8 @@ import { createPublicClient, http, formatUnits } from 'viem';
 import { polygon, polygonAmoy } from 'viem/chains';
 
 // ─── Contract Addresses ───────────────────────────────────────────────────────
-// TODO: Replace with real deployed address after running deploy script
-const RFLAG_CONTRACT_AMOY    = '0x0000000000000000000000000000000000000000'; // testnet
-const RFLAG_CONTRACT_POLYGON = '0x0000000000000000000000000000000000000000'; // mainnet
+const RFLAG_CONTRACT_AMOY    = '0x0000000000000000000000000000000000000000'; // testnet (pendiente)
+const RFLAG_CONTRACT_POLYGON = '0xc3Da43E208388c8e24F2339f8D032B7254f3B9d6'; // mainnet ✅ desplegado
 
 const USE_TESTNET = import.meta.env.DEV; // testnet in dev, mainnet in prod
 export const RFLAG_ADDRESS = USE_TESTNET ? RFLAG_CONTRACT_AMOY : RFLAG_CONTRACT_POLYGON;
