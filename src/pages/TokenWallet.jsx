@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion'; // eslint-disable-line no-unused-vars
-import { useAccount, useConnect, useDisconnect } from 'wagmi';
+import { useAccount, useConnect, useDisconnect, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import {
   getRFLAGBalance,
   getCheckinStatus,
@@ -10,6 +10,7 @@ import {
   REWARDS,
   SPEND_COSTS,
   RFLAG_ADDRESS,
+  RFLAG_ABI,
 } from '../services/rflagToken';
 
 const IS_DEPLOYED = RFLAG_ADDRESS !== '0x0000000000000000000000000000000000000000';
@@ -20,12 +21,16 @@ export default function TokenWallet() {
   const { connect, connectors } = useConnect();
   const { disconnect } = useDisconnect();
 
+  const { writeContract, data: txHash, isPending: txPending, error: txError } = useWriteContract();
+  const { isLoading: txConfirming, isSuccess: txSuccess } = useWaitForTransactionReceipt({ hash: txHash });
+
   const [balance, setBalance]       = useState('0');
   const [history, setHistory]       = useState([]);
   const [checkin, setCheckin]       = useState({ canClaim: true, nextCheckin: null });
   const [loading, setLoading]       = useState(true);
   const [activeTab, setActiveTab]   = useState('wallet'); // wallet | earn | spend
   const [claimingCheckin, setClaimingCheckin] = useState(false);
+  const [spendingItem, setSpendingItem] = useState(null); // label of item being spent
 
   const loadData = useCallback(async () => {
     if (!address) { setLoading(false); return; }
@@ -43,18 +48,41 @@ export default function TokenWallet() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  const handleCheckin = async () => {
-    if (!isConnected || !checkin.canClaim) return;
-    setClaimingCheckin(true);
-    try {
-      // In production: call contract.claimDailyCheckin() via wagmi writeContract
-      // For now show success UI
-      await new Promise(r => setTimeout(r, 1500));
-      setCheckin({ canClaim: false, nextCheckin: new Date(Date.now() + 86400000) });
-      setBalance(prev => (parseFloat(prev.replace(/,/g,'')) + REWARDS.DAILY_CHECKIN).toLocaleString('en', { maximumFractionDigits: 2 }));
-    } finally {
-      setClaimingCheckin(false);
+  // Reload balance after successful transaction
+  useEffect(() => {
+    if (txSuccess) {
+      loadData();
+      setSpendingItem(null);
     }
+  }, [txSuccess, loadData]);
+
+  const handleCheckin = () => {
+    if (!isConnected || !checkin.canClaim) return;
+    if (IS_DEPLOYED) {
+      writeContract({
+        address: RFLAG_ADDRESS,
+        abi: RFLAG_ABI,
+        functionName: 'claimDailyCheckin',
+      });
+    } else {
+      // Pre-launch preview: simulate check-in
+      setClaimingCheckin(true);
+      setTimeout(() => {
+        setCheckin({ canClaim: false, nextCheckin: new Date(Date.now() + 86400000) });
+        setBalance(prev => (parseFloat(prev.replace(/,/g,'')) + REWARDS.DAILY_CHECKIN).toLocaleString('en', { maximumFractionDigits: 2 }));
+        setClaimingCheckin(false);
+      }, 1500);
+    }
+  };
+
+  const handleSpend = (functionName, label) => {
+    if (!isConnected || !IS_DEPLOYED) return;
+    setSpendingItem(label);
+    writeContract({
+      address: RFLAG_ADDRESS,
+      abi: RFLAG_ABI,
+      functionName,
+    });
   };
 
   const formatAddress = (addr) => addr ? `${addr.slice(0,6)}...${addr.slice(-4)}` : '';
@@ -158,7 +186,7 @@ export default function TokenWallet() {
             <motion.button
               initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
               onClick={handleCheckin}
-              disabled={!checkin.canClaim || claimingCheckin}
+              disabled={!checkin.canClaim || claimingCheckin || (IS_DEPLOYED && (txPending || txConfirming) && !spendingItem)}
               className={`w-full rounded-2xl p-4 flex items-center gap-4 transition-all ${
                 checkin.canClaim
                   ? 'bg-green-500/20 border border-green-500/40 hover:bg-green-500/30'
@@ -293,28 +321,32 @@ export default function TokenWallet() {
                   className="space-y-3"
                 >
                   <p className="text-white/50 text-xs font-medium uppercase tracking-wider px-1">Usa $RFLAG en el app</p>
+                  {txError && (
+                    <p className="text-red-400 text-xs px-1">{txError.shortMessage || 'Error en transacción'}</p>
+                  )}
                   {[
                     {
                       icon: '👑', label: 'Premium 1 mes',
                       desc: 'Búsqueda ilimitada, FaceScan, Dating',
                       cost: SPEND_COSTS.PREMIUM_MONTH,
-                      color: 'yellow',
+                      fn: 'spendPremium',
                     },
                     {
                       icon: '🚀', label: 'Boost de perfil',
                       desc: 'Aparece primero en búsquedas por 24h',
                       cost: SPEND_COSTS.BOOST_PROFILE,
-                      color: 'blue',
+                      fn: 'spendBoost',
                     },
                     {
                       icon: '🎯', label: 'Soporte prioritario',
                       desc: 'Respuesta en menos de 1 hora',
                       cost: SPEND_COSTS.PRIORITY_SUPPORT,
-                      color: 'purple',
+                      fn: 'spendPrioritySupport',
                     },
                   ].map((item, i) => {
                     const bal = parseFloat(balance.replace(/,/g,''));
                     const canAfford = bal >= item.cost;
+                    const isBusy = (txPending || txConfirming) && spendingItem === item.label;
                     return (
                       <motion.div
                         key={i}
@@ -331,15 +363,17 @@ export default function TokenWallet() {
                           </div>
                         </div>
                         <button
-                          disabled={!canAfford || !IS_DEPLOYED}
-                          onClick={() => {/* TODO: writeContract */}}
+                          disabled={!canAfford || !IS_DEPLOYED || isBusy}
+                          onClick={() => handleSpend(item.fn, item.label)}
                           className={`w-full mt-3 py-2.5 rounded-xl text-sm font-bold transition-all ${
-                            canAfford && IS_DEPLOYED
+                            canAfford && IS_DEPLOYED && !isBusy
                               ? 'bg-[#d411b4] hover:bg-[#b30e99] text-white'
                               : 'bg-white/10 text-white/30 cursor-not-allowed'
                           }`}
                         >
-                          {!IS_DEPLOYED
+                          {isBusy
+                            ? (txConfirming ? 'Confirmando...' : 'Procesando...')
+                            : !IS_DEPLOYED
                             ? 'Disponible pronto'
                             : canAfford
                             ? `Quemar ${item.cost} RFLAG`
