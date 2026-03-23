@@ -176,6 +176,7 @@ app.use('/api/safety', safetyRouter);
 app.use('/api/twilio', require('./routes/twilio'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/places', require('./routes/places'));
+app.use('/api/polymarket', require('./routes/polymarket'));
 
 // ── File Upload (any route) ───────────────────────────────────
 const upload = require('./middleware/upload');
