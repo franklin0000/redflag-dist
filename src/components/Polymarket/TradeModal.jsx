@@ -82,7 +82,7 @@ export default function TradeModal({ market, yesPrice, noPrice, onClose }) {
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
-          tokenId: market?.tokenId || "mock-token-id-1234",
+          tokenId: (outcome === 'NO' ? market?.noTokenId : market?.tokenId) || "mock-token-id-1234",
           price: activePrice,
           size: size,
           side: side,

@@ -15,10 +15,9 @@ ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip)
 export default function MarketCard({ market }) {
   const [tradeModalOpen, setTradeModalOpen] = useState(false);
 
-  // Mocked or parsed market odds
   const title = market?.title || "Will Taylor Swift & Travis Kelce engage in 2026?";
-  const yesPrice = market?.activeRoute?.price || 0.74; // example price
-  const noPrice = (1 - yesPrice).toFixed(2);
+  const yesPrice = market?.yesPrice ?? 0.74;
+  const noPrice = market?.noPrice ?? parseFloat((1 - yesPrice).toFixed(4));
 
   const data = {
     labels: ['Day 1', 'Day 2', 'Day 3', 'Day 4', 'Day 5', 'Today'],

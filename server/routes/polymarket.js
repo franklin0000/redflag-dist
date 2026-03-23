@@ -15,17 +15,42 @@ const OPERATOR_ADDRESS = process.env.VITE_PROXY_WALLET_ADDRESS || '';
 // The markup fee requested: 1.5%
 const MARKUP_FEE_PERCENT = 0.015;
 
-// Fetch active markets from Polymarket Gamma API
+// Fetch active markets from Polymarket Gamma API (normalized)
 router.get('/markets', async (req, res) => {
   try {
-    // For dating context, we can search for celebrity/social events
-    // Here we just fetch active items for demonstration
     const url = 'https://gamma-api.polymarket.com/events?active=true&closed=false&limit=20';
     const response = await fetch(url);
     if (!response.ok) throw new Error('Failed to fetch from polymarket gamma');
-    
-    const data = await response.json();
-    res.json(data);
+
+    const events = await response.json();
+
+    // Normalize: flatten nested markets[0] prices into top-level fields
+    const normalized = events.map(event => {
+      const sub = Array.isArray(event.markets) ? event.markets[0] : null;
+      const prices = sub?.outcomePrices
+        ? sub.outcomePrices.map(p => parseFloat(p))
+        : [0.5, 0.5];
+      const yesPrice = prices[0] ?? 0.5;
+      const noPrice = prices[1] ?? (1 - yesPrice);
+      const tokenIds = sub?.clobTokenIds || [];
+
+      return {
+        id: event.id,
+        title: event.title,
+        description: (event.description || '').slice(0, 200),
+        image: event.image,
+        volume: event.volume,
+        liquidity: event.liquidity,
+        yesPrice: parseFloat(yesPrice.toFixed(4)),
+        noPrice: parseFloat(noPrice.toFixed(4)),
+        tokenId: tokenIds[0] || null,
+        noTokenId: tokenIds[1] || null,
+        active: event.active,
+        endDate: event.endDate,
+      };
+    });
+
+    res.json(normalized);
   } catch (error) {
     console.error('Error fetching polymarket markets:', error.message);
     res.status(500).json({ error: 'Failed to fetch markets' });
