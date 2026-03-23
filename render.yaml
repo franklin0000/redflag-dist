@@ -12,7 +12,7 @@ services:
       - www.redflag.u
       - redflag.web3
       - www.redflag.web3
-    buildCommand: npm install --include=dev && npm run build && cd server && npm install
+    buildCommand: npm ci && (cd server && npm ci) && npm run build
     startCommand: node server/index.js
     envVars:
       - key: PORT
