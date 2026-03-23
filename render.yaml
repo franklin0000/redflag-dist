@@ -22,7 +22,7 @@ services:
       - key: FRONTEND_URL
         value: https://redflag-source.onrender.com
       - key: VITE_PROXY_WALLET_ADDRESS
-        value: "0x01C5e3D2924300a548c19295c1798C8a4ef54F39"
+        value: "0x4Bb924F138b20ED83ba2dE659A4cFBee5745CB38"
       # ── Secrets (set manually in Render dashboard) ─────────────
       - key: DATABASE_URL
         sync: false
