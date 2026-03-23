@@ -89,7 +89,13 @@ app.post('/api/webhook/stripe',
 app.use(express.json({ limit: '10mb' }));
 
 // ── Serve React frontend (dist/) ──────────────────────────────
-const DIST = path.join(__dirname, '..', 'dist');
+const DIST   = path.join(__dirname, '..', 'dist');
+const PUBLIC = path.join(__dirname, '..', 'public');
+
+// Whitepaper served directly from public/ — no build needed, always up to date
+app.get('/whitepaper.html', (_req, res) => res.sendFile(path.join(PUBLIC, 'whitepaper.html')));
+app.get('/whitepaper.md',   (_req, res) => res.sendFile(path.join(PUBLIC, 'whitepaper.md')));
+
 app.use(express.static(DIST, {
   setHeaders: (res, filePath) => {
     if (filePath.endsWith('index.html')) {
