@@ -1,29 +1,18 @@
 import React, { useState } from 'react';
-import { Line } from 'react-chartjs-2';
 import { motion } from 'framer-motion';
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Tooltip,
-  Filler
-} from 'chart.js';
+import { useNavigate } from 'react-router-dom';
 import TradeModal from './TradeModal';
 
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Filler);
-
 export default function MarketCard({ market, filter }) {
+  const navigate = useNavigate();
   const [tradeModalOpen, setTradeModalOpen] = useState(false);
+  const [selectedSide, setSelectedSide] = useState(null); // 'YES' or 'NO'
 
-  // If the user selects a filter that doesn't match the mock logic, we simply hide it
-  // For MVP: display all if filter is "All"
+  // Filter Logic Mocking
   if (filter && filter !== 'All' && market?.category !== filter) {
-    // We mock categories based on string since polymarket sometimes lacks direct category filtering in this endpoint
     const text = (market?.title || "").toLowerCase();
-    const isCrypto = text.includes('bitcoin') || text.includes('eth');
-    const isSport = text.includes('super bowl') || text.includes('nfl');
+    const isCrypto = text.includes('bitcoin') || text.includes('eth') || text.includes('solana');
+    const isSport = text.includes('super bowl') || text.includes('nfl') || text.includes('nba');
     const isSocial = !isCrypto && !isSport;
     
     if (filter === 'Crypto' && !isCrypto) return null;
@@ -34,110 +23,66 @@ export default function MarketCard({ market, filter }) {
   const title = market?.title || "Will Taylor Swift & Travis Kelce engage in 2026?";
   const yesPrice = market?.yesPrice ?? 0.74;
   const noPrice = market?.noPrice ?? parseFloat((1 - yesPrice).toFixed(4));
-  
-  // Decide color scheme based on current odds (just a visual feature for premium feel)
-  const isVolatile = yesPrice > 0.3 && yesPrice < 0.7;
-  const primaryColor = isVolatile ? '#ec4899' : '#10b981'; // pink or emerald
-  const bgColor = isVolatile ? 'rgba(236, 72, 153, 0.1)' : 'rgba(16, 185, 129, 0.1)';
+  const volume = market?.volume || Math.floor(Math.random() * 500000);
+  const image = market?.image || "https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=100&h=100&fit=crop";
 
-  const data = {
-    labels: ['Day 1', 'Day 2', 'Day 3', 'Day 4', 'Day 5', 'Today'],
-    datasets: [
-      {
-        label: 'YES Odds',
-        data: [0.55, 0.60, 0.65, 0.62, 0.70, yesPrice],
-        borderColor: primaryColor,
-        backgroundColor: bgColor,
-        fill: true,
-        tension: 0.4,
-        pointRadius: 0,
-        pointHoverRadius: 6,
-      }
-    ]
-  };
-
-  const options = {
-    responsive: true,
-    maintainAspectRatio: false,
-    scales: {
-      y: { min: 0, max: 1, display: false },
-      x: { display: false }
-    },
-    plugins: { legend: { display: false } },
-    interaction: {
-      mode: 'index',
-      intersect: false,
-    },
+  const handleOpenTrade = (side) => {
+    setSelectedSide(side);
+    setTradeModalOpen(true);
   };
 
   return (
-    <motion.div 
-      initial={{ opacity: 0, y: 20 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true }}
-      whileHover={{ scale: 1.01, translateY: -4 }}
-      transition={{ duration: 0.3, ease: 'easeOut' }}
-      className="relative overflow-hidden bg-white/[0.03] backdrop-blur-2xl border border-white/[0.08] rounded-3xl p-6 shadow-2xl w-full"
-    >
-      {/* Decorative ambient blurred glows */}
-      <div className="absolute -top-16 -right-16 w-32 h-32 bg-pink-500/20 blur-[50px] rounded-full pointer-events-none" />
-      <div className="absolute -bottom-16 -left-16 w-32 h-32 bg-purple-500/20 blur-[50px] rounded-full pointer-events-none" />
-
-      <div className="relative z-10 flex flex-col h-full">
-        {/* Header content */}
-        <div className="flex justify-between items-start mb-3 gap-4">
-          <h3 className="text-xl text-white font-extrabold leading-snug tracking-tight">
-            {title}
-          </h3>
-          <span className="bg-white/10 border border-white/5 text-gray-300 text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full whitespace-nowrap">
-            Polymarket
-          </span>
-        </div>
-        
-        <p className="text-gray-400/80 text-sm mb-6 flex items-center gap-1.5 font-medium">
-          <span className="material-icons text-sm text-pink-500">trending_up</span>
-          Vol. ${(market?.volume || 145000).toLocaleString(undefined, {maximumFractionDigits:0})}
-        </p>
-        
-        {/* Dynamic Line Chart */}
-        <div className="h-28 w-full mb-6 relative">
-          <Line data={data} options={options} />
-          <div className="absolute inset-0 bg-gradient-to-t from-gray-900/50 to-transparent pointer-events-none" />
-        </div>
-
-        {/* Odds Box */}
-        <div className="flex justify-between bg-black/40 border border-white/5 rounded-2xl p-4 mb-5 shadow-inner backdrop-blur-md">
-          <div className="flex flex-col items-center flex-1 border-r border-white/10">
-            <span className="text-emerald-400 font-black text-3xl tracking-tighter">
-              {Math.round(yesPrice * 100)}<span className="text-lg opacity-80">¢</span>
-            </span>
-            <span className="text-gray-500 text-xs font-bold tracking-widest mt-1">YES</span>
+    <>
+      <motion.div 
+        whileHover={{ scale: 1.015, translateY: -2 }}
+        transition={{ duration: 0.2 }}
+        className="bg-[#1b1c20]/60 backdrop-blur-xl border border-white/[0.06] hover:border-white/10 rounded-2xl p-4 shadow-xl flex flex-col justify-between h-[200px] cursor-pointer"
+        onClick={() => navigate(`/predictions/${market.id || market.tokenId}`)}
+      >
+        <div className="flex gap-4">
+          <div className="flex-1">
+            <div className="text-gray-400 text-xs font-bold uppercase mb-2 flex items-center gap-1 opacity-80">
+              <span className="material-icons text-[14px] text-gray-500">equalizer</span> 
+              ${parseFloat(volume).toLocaleString(undefined, {maximumFractionDigits:0})} Vol.
+            </div>
+            <h3 className="text-[17px] font-semibold text-gray-100 leading-snug line-clamp-3 hover:text-white transition-colors">
+              {title}
+            </h3>
           </div>
-          <div className="flex flex-col items-center flex-1">
-            <span className="text-rose-400 font-black text-3xl tracking-tighter">
-              {Math.round(noPrice * 100)}<span className="text-lg opacity-80">¢</span>
-            </span>
-            <span className="text-gray-500 text-xs font-bold tracking-widest mt-1">NO</span>
+          <div className="w-14 h-14 flex-shrink-0 bg-gray-800 rounded-[14px] border border-white/5 overflow-hidden shadow-inner">
+            <img src={image} alt="Market" className="w-full h-full object-cover" onError={(e) => { e.target.src = "https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=100&h=100&fit=crop"}} />
           </div>
         </div>
 
-        {/* Action Button */}
-        <button 
-          onClick={() => setTradeModalOpen(true)}
-          className="w-full bg-white text-black hover:bg-gray-200 hover:scale-[1.02] transform transition-all font-bold py-3.5 rounded-xl shadow-[0_0_20px_rgba(255,255,255,0.2)]"
-        >
-          Trade Market
-        </button>
-      </div>
+        {/* Polymarket Signature Distinct YES / NO Action Buttons */}
+        <div className="mt-4 flex gap-2" onClick={(e) => e.stopPropagation()}>
+           <button 
+             onClick={() => handleOpenTrade('YES')}
+             className="flex-1 bg-[#22c55e]/10 text-[#22c55e] hover:bg-[#22c55e]/20 border border-[#22c55e]/10 hover:border-[#22c55e]/30 py-3 rounded-[12px] font-bold text-xl flex items-center justify-between px-4 transition-all"
+           >
+             <span className="text-sm font-semibold text-[#22c55e]/80 tracking-wide">Yes</span>
+             <span>{Math.round(yesPrice * 100)}<span className="text-sm font-medium">¢</span></span>
+           </button>
+           
+           <button 
+             onClick={() => handleOpenTrade('NO')}
+             className="flex-1 bg-[#ef4444]/10 text-[#ef4444] hover:bg-[#ef4444]/20 border border-[#ef4444]/10 hover:border-[#ef4444]/30 py-3 rounded-[12px] font-bold text-xl flex items-center justify-between px-4 transition-all"
+           >
+             <span className="text-sm font-semibold text-[#ef4444]/80 tracking-wide">No</span>
+             <span>{Math.round(noPrice * 100)}<span className="text-sm font-medium">¢</span></span>
+           </button>
+        </div>
+      </motion.div>
 
       {tradeModalOpen && (
         <TradeModal 
-          market={market} 
+          market={{...market, title, image, volume}} 
           yesPrice={yesPrice} 
           noPrice={noPrice} 
+          initialSide={selectedSide}
           onClose={() => setTradeModalOpen(false)} 
         />
       )}
-    </motion.div>
+    </>
   );
 }

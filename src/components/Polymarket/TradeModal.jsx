@@ -1,192 +1,285 @@
 import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { parseUnits } from 'viem';
 
-// The public address of our backend operator wallet that executes proxy trades
-// We read this from the frontend environment variables so you can update it without changing code.
-const PROXY_OPERATOR_WALLET = import.meta.env.VITE_PROXY_WALLET_ADDRESS || "0xYourBackendOperatorAddress";
-// Standard USDC address on Polygon
-const USDC_ADDRESS = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174";
+const PROXY_WALLET = import.meta.env.VITE_PROXY_WALLET_ADDRESS || '0x4Bb924F138b20ED83ba2dE659A4cFBee5745CB38';
+const USDC_ADDRESS = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174';
+const API_BASE = import.meta.env.VITE_API_URL || '';
 
 const erc20Abi = [
   {
-    name: "approve",
-    type: "function",
-    stateMutability: "nonpayable",
+    name: 'transfer',
+    type: 'function',
+    stateMutability: 'nonpayable',
     inputs: [
-      { name: "spender", type: "address" },
-      { name: "amount", type: "uint256" }
+      { name: 'recipient', type: 'address' },
+      { name: 'amount', type: 'uint256' },
     ],
-    outputs: [{ name: "", type: "bool" }]
+    outputs: [{ name: '', type: 'bool' }],
   },
-  {
-    name: "transfer",
-    type: "function",
-    stateMutability: "nonpayable",
-    inputs: [
-      { name: "recipient", type: "address" },
-      { name: "amount", type: "uint256" }
-    ],
-    outputs: [{ name: "", type: "bool" }]
-  }
 ];
 
-export default function TradeModal({ market, yesPrice, noPrice, onClose }) {
-  const { address } = useAccount();
-  const [side, setSide] = useState('BUY'); // or SELL
-  const [outcome, setOutcome] = useState('YES'); // YES or NO
-  const [size, setSize] = useState(10);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [hashResult, setHashResult] = useState(null);
+const STEPS = { IDLE: 0, SIGNING: 1, CONFIRMING: 2, EXECUTING: 3, DONE: 4, ERROR: 5 };
 
-  const { writeContract, data: hash, isPending } = useWriteContract();
-  const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({ hash });
+export default function TradeModal({ market, yesPrice, noPrice, initialSide, onClose }) {
+  const { address, isConnected } = useAccount();
+  const [outcome, setOutcome] = useState(initialSide || 'YES');
+  const [side, setSide] = useState('BUY');
+  const [size, setSize] = useState(10);
+  const [step, setStep] = useState(STEPS.IDLE);
+  const [errorMsg, setErrorMsg] = useState('');
+  const [resultHash, setResultHash] = useState('');
 
   const activePrice = outcome === 'YES' ? yesPrice : noPrice;
-  const markupFee = 0.015; // 1.5% transparency
-  const totalCost = side === 'BUY' ? size * activePrice : size * activePrice; // simpler logic
+  const totalCost = parseFloat((size * activePrice).toFixed(4));
+  const feeAmount = parseFloat((totalCost * 0.015).toFixed(4));
+  const potentialReturn = parseFloat((size * 1).toFixed(2));
+  const potentialProfit = parseFloat((potentialReturn - totalCost).toFixed(2));
 
-  // Execute Proxy once the transaction is fully confirmed on the blockchain
+  const { writeContract, data: txHash } = useWriteContract();
+  const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({ hash: txHash });
+
+  // wallet submitted → now waiting for confirmation
   useEffect(() => {
-    if (isConfirmed && hash) {
-      executeProxyTrade(hash);
+    if (txHash && step === STEPS.SIGNING) {
+      setStep(STEPS.CONFIRMING);
     }
-  }, [isConfirmed, hash]);
+  }, [txHash]);
 
-  const executeProxyTrade = async (txHash) => {
+  // block confirmed → call backend
+  useEffect(() => {
+    if (isConfirmed && txHash && step === STEPS.CONFIRMING) {
+      setStep(STEPS.EXECUTING);
+      callBackend(txHash);
+    }
+  }, [isConfirmed, txHash]);
+
+  const callBackend = async (hash) => {
     try {
-      const proxyUrl = import.meta.env.VITE_API_URL
-        ? `${import.meta.env.VITE_API_URL}/api/polymarket/proxy-trade`
-        : '/api/polymarket/proxy-trade';
-
       const token = localStorage.getItem('token') || localStorage.getItem('rf_token');
-      const response = await fetch(proxyUrl, {
+      const res = await fetch(`${API_BASE}/api/polymarket/proxy-trade`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          tokenId: (outcome === 'NO' ? market?.noTokenId : market?.tokenId) || "mock-token-id-1234",
+          tokenId: outcome === 'NO' ? market?.noTokenId : market?.tokenId,
           price: activePrice,
           size: size,
           side: side,
-          txHash: txHash,
-          userAddress: address
-        })
+          txHash: hash,
+          userAddress: address,
+        }),
       });
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || "Trade execution failed");
-      }
-
-      setHashResult(data.hash);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Trade failed');
+      setResultHash(data.orderId || data.hash || hash);
+      setStep(STEPS.DONE);
     } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
+      setErrorMsg(err.message);
+      setStep(STEPS.ERROR);
     }
   };
 
-  const handleExecute = async () => {
-    if (!address) {
-      setError("Please connect your wallet first.");
+  const handleTrade = () => {
+    if (!isConnected || !address) {
+      setErrorMsg('Connect your wallet first.');
       return;
     }
-    setError(null);
-    setLoading(true);
+    if (size <= 0 || totalCost <= 0) {
+      setErrorMsg('Enter a valid number of shares.');
+      return;
+    }
+    setErrorMsg('');
+    setStep(STEPS.SIGNING);
 
     try {
-      // Step 1: Transfer USDC to backend proxy wallet
-      const usdcAmount = parseUnits(totalCost.toFixed(6), 6);
+      const usdcAmt = parseUnits(totalCost.toFixed(6), 6);
       writeContract({
         address: USDC_ADDRESS,
         abi: erc20Abi,
         functionName: 'transfer',
-        args: [PROXY_OPERATOR_WALLET, usdcAmount],
+        args: [PROXY_WALLET, usdcAmt],
       });
-      // Flow continues in the useEffect hook when the wallet confirms the tx
     } catch (err) {
-      setError(err.message);
-      setLoading(false);
+      setErrorMsg(err.message);
+      setStep(STEPS.IDLE);
     }
   };
 
+  const stepLabels = ['', 'Waiting for wallet signature...', 'Waiting for block confirmation...', 'Submitting order to Polymarket...', '', ''];
+
   return (
-    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-      <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-md p-6 relative shadow-2xl">
-        <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-white">✕</button>
-        
-        <h2 className="text-2xl font-bold text-white mb-1">Trade Market</h2>
-        <p className="text-gray-400 text-sm mb-6 max-w-[90%] truncate leading-tight">
-          {market?.title || "Will Taylor Swift & Travis Kelce engage in 2026?"}
-        </p>
-
-        <div className="flex gap-2 mb-6">
-          <button 
-            className={`flex-1 py-2 rounded-lg font-bold ${outcome === 'YES' ? 'bg-green-600 text-white' : 'bg-gray-800 text-gray-400'}`}
-            onClick={() => setOutcome('YES')}
-          >
-            YES {Math.round(yesPrice * 100)}¢
-          </button>
-          <button 
-            className={`flex-1 py-2 rounded-lg font-bold ${outcome === 'NO' ? 'bg-red-600 text-white' : 'bg-gray-800 text-gray-400'}`}
-            onClick={() => setOutcome('NO')}
-          >
-            NO {Math.round(noPrice * 100)}¢
-          </button>
-        </div>
-
-        <div className="mb-6">
-          <label className="block text-gray-400 text-sm mb-2">Number of Shares (Size)</label>
-          <input 
-            type="number" 
-            min="1"
-            value={size}
-            onChange={(e) => setSize(Number(e.target.value))}
-            className="w-full bg-gray-800 text-white rounded-lg p-3 outline-none focus:ring-2 focus:ring-pink-500 border border-gray-700" 
-          />
-        </div>
-
-        <div className="bg-gray-800/50 rounded-lg p-4 mb-6 border border-yellow-500/30">
-          <div className="flex justify-between text-sm mb-2">
-            <span className="text-gray-400">Average Price</span>
-            <span className="text-white">${activePrice.toFixed(2)}</span>
-          </div>
-          <div className="flex justify-between text-sm mb-2">
-            <span className="text-gray-400">Est. Total Cost</span>
-            <span className="text-white font-bold">${totalCost.toFixed(2)}</span>
-          </div>
-          <hr className="border-gray-700 my-2" />
-          <div className="flex justify-between text-xs text-yellow-500/80">
-            <span>Platform Proxy Fee (Included)</span>
-            <span>1.5%</span>
-          </div>
-          <p className="text-[10px] text-gray-500 mt-2">
-            Trades are executed securely via our proxy node on the Polygon network. A 1.5% markup is applied to the market odds.
-          </p>
-        </div>
-
-        {error && <div className="text-red-400 text-sm bg-red-900/20 p-3 rounded-lg mb-4">{error}</div>}
-        {hashResult && (
-          <div className="text-green-400 text-sm bg-green-900/20 p-3 rounded-lg mb-4 flex flex-col gap-1">
-            <b>Trade Successful!</b>
-            <span className="text-xs break-all">Hash: {hashResult}</span>
-          </div>
-        )}
-
-        <button 
-          onClick={handleExecute}
-          disabled={loading || isPending || hashResult}
-          className="w-full bg-pink-600 hover:bg-pink-700 disabled:bg-gray-600 text-white font-bold py-3 rounded-lg transition-colors flex justify-center items-center gap-2"
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-end md:items-center justify-center z-50 p-0 md:p-4"
+        onClick={(e) => e.target === e.currentTarget && onClose()}
+      >
+        <motion.div
+          initial={{ y: '100%', opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: '100%', opacity: 0 }}
+          transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+          className="bg-[#15161a] border border-white/10 rounded-t-3xl md:rounded-3xl w-full max-w-md p-6 relative shadow-2xl"
         >
-          {loading || isPending ? (
-            <>Processing <span className="animate-spin text-xl">↻</span></>
-          ) : hashResult ? 'Completed' : 'Approve & Execute Trade'}
-        </button>
-      </div>
-    </div>
+          {/* drag handle */}
+          <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-6 md:hidden" />
+
+          <button
+            onClick={onClose}
+            className="absolute top-5 right-5 w-8 h-8 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center transition-colors"
+          >
+            <span className="material-icons text-sm text-gray-400">close</span>
+          </button>
+
+          <h2 className="text-xl font-black mb-1">Trade</h2>
+          <p className="text-gray-500 text-xs mb-5 pr-8 line-clamp-2 leading-tight">
+            {market?.title}
+          </p>
+
+          {/* YES / NO */}
+          <div className="flex gap-2 mb-4">
+            {['YES', 'NO'].map(o => {
+              const price = o === 'YES' ? yesPrice : noPrice;
+              const isActive = outcome === o;
+              return (
+                <button
+                  key={o}
+                  onClick={() => setOutcome(o)}
+                  className={`flex-1 py-3 rounded-xl font-black text-lg transition-all border ${
+                    isActive && o === 'YES' ? 'bg-green-500/15 border-green-500/40 text-green-400'
+                    : isActive && o === 'NO' ? 'bg-red-500/15 border-red-500/40 text-red-400'
+                    : 'bg-white/[0.03] border-white/5 text-gray-500 hover:border-white/10'
+                  }`}
+                >
+                  {o} <span className="text-sm font-medium">{Math.round(price * 100)}¢</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* BUY / SELL */}
+          <div className="flex gap-1 bg-black/30 p-1 rounded-xl mb-5">
+            {['BUY', 'SELL'].map(s => (
+              <button
+                key={s}
+                onClick={() => setSide(s)}
+                className={`flex-1 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all ${
+                  side === s ? 'bg-white/10 text-white shadow' : 'text-gray-500 hover:text-white'
+                }`}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+
+          {/* Share count */}
+          <div className="mb-5">
+            <label className="block text-xs text-gray-500 font-bold uppercase tracking-widest mb-2">
+              Number of Shares
+            </label>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setSize(s => Math.max(1, s - 10))}
+                className="w-10 h-10 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center text-gray-400 font-black transition-colors"
+              >−</button>
+              <input
+                type="number"
+                min="1"
+                value={size}
+                onChange={e => setSize(Math.max(1, parseInt(e.target.value) || 1))}
+                className="flex-1 bg-black/30 border border-white/10 rounded-xl py-3 px-4 text-white text-center font-black text-lg outline-none focus:border-pink-500/50"
+              />
+              <button
+                onClick={() => setSize(s => s + 10)}
+                className="w-10 h-10 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center text-gray-400 font-black transition-colors"
+              >+</button>
+            </div>
+          </div>
+
+          {/* Summary */}
+          <div className="bg-black/20 border border-white/5 rounded-2xl p-4 mb-5 space-y-2.5">
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-500">Price per share</span>
+              <span className="text-white font-bold">{(activePrice * 100).toFixed(1)}¢</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-500">Total cost</span>
+              <span className="text-white font-bold">${totalCost.toFixed(2)} USDC</span>
+            </div>
+            {side === 'BUY' && (
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">If {outcome} wins (max return)</span>
+                <span className={`font-bold ${potentialProfit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                  +${potentialProfit.toFixed(2)}
+                </span>
+              </div>
+            )}
+            <div className="border-t border-white/5 pt-2 flex justify-between text-xs text-yellow-500/70">
+              <span>Platform fee (included)</span>
+              <span>1.5% ({feeAmount.toFixed(3)} USDC)</span>
+            </div>
+          </div>
+
+          {/* Step indicator */}
+          {step > STEPS.IDLE && step < STEPS.DONE && step !== STEPS.ERROR && (
+            <div className="mb-4 flex items-center gap-3 bg-white/[0.03] border border-white/5 rounded-xl p-3">
+              <div className="w-4 h-4 border-2 border-pink-500 border-t-transparent rounded-full animate-spin flex-shrink-0" />
+              <span className="text-sm text-gray-300">{stepLabels[step]}</span>
+            </div>
+          )}
+
+          {/* Error */}
+          {(errorMsg || step === STEPS.ERROR) && (
+            <div className="mb-4 bg-red-500/10 border border-red-500/20 rounded-xl p-3 text-red-400 text-sm flex items-start gap-2">
+              <span className="material-icons text-sm mt-0.5 flex-shrink-0">error_outline</span>
+              {errorMsg || 'Trade failed. Please try again.'}
+            </div>
+          )}
+
+          {/* Success */}
+          {step === STEPS.DONE && (
+            <div className="mb-4 bg-green-500/10 border border-green-500/20 rounded-xl p-4">
+              <div className="flex items-center gap-2 text-green-400 font-black text-sm mb-1">
+                <span className="material-icons text-base">check_circle</span> Trade Executed!
+              </div>
+              {resultHash && (
+                <p className="text-xs text-gray-500 font-mono break-all">Order: {resultHash}</p>
+              )}
+            </div>
+          )}
+
+          {/* Main CTA */}
+          <motion.button
+            whileTap={{ scale: 0.97 }}
+            onClick={step === STEPS.DONE || step === STEPS.ERROR ? onClose : handleTrade}
+            disabled={step > STEPS.IDLE && step < STEPS.DONE && step !== STEPS.ERROR}
+            className={`w-full py-4 rounded-2xl font-black text-base transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+              step === STEPS.DONE || step === STEPS.ERROR
+                ? 'bg-white/10 text-white'
+                : outcome === 'YES'
+                ? 'bg-green-500 hover:bg-green-400 text-black shadow-lg shadow-green-500/20'
+                : 'bg-red-500 hover:bg-red-400 text-white shadow-lg shadow-red-500/20'
+            }`}
+          >
+            {step === STEPS.DONE ? '✓ Done'
+              : step === STEPS.ERROR ? 'Close'
+              : step > STEPS.IDLE ? 'Processing...'
+              : `${side} ${outcome} — $${totalCost.toFixed(2)} USDC`}
+          </motion.button>
+
+          {!isConnected && step === STEPS.IDLE && (
+            <p className="text-center text-xs text-yellow-500/80 mt-3">
+              ⚠️ Connect your wallet to trade on Polygon
+            </p>
+          )}
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
   );
 }

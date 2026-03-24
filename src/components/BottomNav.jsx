@@ -8,7 +8,7 @@ export default function BottomNav() {
     const navItems = [
         { to: '/', icon: 'home', label: 'Home', match: (p) => p === '/' },
         { to: '/map', icon: 'map', label: 'Radar', match: (p) => p.startsWith('/map') },
-        { to: '/community', icon: 'groups', label: 'Social', match: (p) => p.startsWith('/community') },
+        { to: '/predictions', icon: 'trending_up', label: 'Markets', match: (p) => p.startsWith('/predictions') || p.startsWith('/portfolio') },
         { to: '/chat', icon: 'forum', label: 'Chat', match: (p) => p.startsWith('/chat') },
         { to: '/profile', icon: 'person', label: 'Profile', match: (p) => p.startsWith('/profile') },
     ];

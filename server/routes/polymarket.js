@@ -51,7 +51,7 @@ router.get('/markets', async (req, res) => {
       return {
         id: event.id,
         title: event.title,
-        description: (event.description || '').slice(0, 200),
+        description: (event.description || '').slice(0, 500),
         image: event.image,
         volume: event.volume,
         liquidity: event.liquidity,
@@ -59,8 +59,10 @@ router.get('/markets', async (req, res) => {
         noPrice: parseFloat(noPrice.toFixed(4)),
         tokenId: tokenIds[0] || null,
         noTokenId: tokenIds[1] || null,
+        conditionId: sub ? sub.conditionId : null,
         active: event.active,
         endDate: event.endDate,
+        category: event.tags?.[0]?.label || 'General'
       };
     });
 
@@ -68,6 +70,138 @@ router.get('/markets', async (req, res) => {
   } catch (error) {
     console.error('Error fetching polymarket markets:', error.message);
     res.status(500).json({ error: 'Failed to fetch markets' });
+  }
+});
+
+// Fetch single market by ID
+router.get('/markets/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const response = await fetch(`https://gamma-api.polymarket.com/events/${id}`);
+    if (!response.ok) return res.status(404).json({ error: 'Market not found' });
+    const event = await response.json();
+
+    const sub = Array.isArray(event.markets) ? event.markets[0] : null;
+    let prices = [0.5, 0.5];
+    let tokenIds = [];
+
+    if (sub) {
+      const raw = sub.outcomePrices;
+      if (typeof raw === 'string') { try { prices = JSON.parse(raw).map(p => parseFloat(p)); } catch(e){} }
+      else if (Array.isArray(raw)) { prices = raw.map(p => parseFloat(p)); }
+
+      const tids = sub.clobTokenIds;
+      if (typeof tids === 'string') { try { tokenIds = JSON.parse(tids); } catch(e){} }
+      else if (Array.isArray(tids)) { tokenIds = tids; }
+    }
+
+    const yesPrice = prices[0] ?? 0.5;
+    const noPrice = prices[1] ?? (1 - yesPrice);
+
+    res.json({
+      id: event.id,
+      title: event.title,
+      description: event.description || '',
+      image: event.image,
+      volume: event.volume,
+      volume24hr: event.volume24hr,
+      liquidity: event.liquidity,
+      yesPrice: parseFloat(yesPrice.toFixed(4)),
+      noPrice: parseFloat(noPrice.toFixed(4)),
+      tokenId: tokenIds[0] || null,
+      noTokenId: tokenIds[1] || null,
+      conditionId: sub?.conditionId || null,
+      active: event.active,
+      endDate: event.endDate,
+      category: event.tags?.[0]?.label || 'General',
+      outcomes: sub?.outcomes || ['Yes', 'No'],
+    });
+  } catch (error) {
+    console.error('Error fetching market:', error.message);
+    res.status(500).json({ error: 'Failed to fetch market' });
+  }
+});
+
+// Fetch Price History
+router.get('/history', async (req, res) => {
+  try {
+    const { tokenId, interval = '1d' } = req.query;
+    if (!tokenId) return res.status(400).json({ error: 'Missing tokenId' });
+
+    // Official CLOB History Endpoint
+    const url = `https://clob.polymarket.com/prices-history?market=${tokenId}&interval=${interval}`;
+    const response = await fetch(url);
+    const data = await response.json();
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch history' });
+  }
+});
+
+// Fetch Order Book
+router.get('/orderbook', async (req, res) => {
+  try {
+    const { tokenId } = req.query;
+    if (!tokenId) return res.status(400).json({ error: 'Missing tokenId' });
+
+    const url = `https://clob.polymarket.com/book?token_id=${tokenId}`;
+    const response = await fetch(url);
+    const data = await response.json();
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch order book' });
+  }
+});
+
+// Fetch User Portfolio
+router.get('/portfolio', requireAuth, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    
+    // 1. Get all trades for this user
+    const { rows: trades } = await db.query(`
+      SELECT token_id, trade_type, trade_size, real_price, user_price, created_at 
+      FROM earned_fees 
+      WHERE user_id = $1
+    `, [userId]);
+
+    if (trades.length === 0) {
+      return res.json({ positions: [], totalValue: 0, dailyPnL: 0 });
+    }
+
+    // 2. Aggregate positions by tokenId
+    const posMap = {};
+    trades.forEach(t => {
+      const tid = t.token_id;
+      if (!posMap[tid]) posMap[tid] = { size: 0, cost: 0, count: 0 };
+      
+      const sizeNum = parseFloat(t.trade_size);
+      const priceNum = parseFloat(t.user_price);
+      
+      if (t.trade_type === 'BUY') {
+        posMap[tid].size += sizeNum;
+        posMap[tid].cost += (sizeNum * priceNum);
+      } else {
+        posMap[tid].size -= sizeNum;
+      }
+    });
+
+    const activeTids = Object.keys(posMap).filter(tid => posMap[tid].size > 0.01);
+    
+    // 3. Simple Mock return for now as fetching all current prices requires a mapping
+    // But we'll try to match with the markets list
+    res.json({ 
+      success: true, 
+      positions: activeTids.map(tid => ({
+        tokenId: tid,
+        size: posMap[tid].size.toFixed(2),
+        avgPrice: (posMap[tid].cost / posMap[tid].size).toFixed(3)
+      })),
+      totalValue: 0 // Frontend will calculate or we can fetch prices here
+    });
+  } catch (error) {
+    console.error('Portfolio error:', error);
+    res.status(500).json({ error: 'Failed to fetch portfolio' });
   }
 });
 
@@ -124,21 +258,11 @@ router.post('/proxy-trade', requireAuth, async (req, res) => {
     const { clobClient, operatorWallet } = polymarket;
 
     if (!operatorWallet) {
-      return res.status(503).json({ error: 'Polymarket operator not configured' });
+      return res.status(503).json({ error: 'Polymarket operator not configured. Contact support.' });
     }
 
-    // SECURITY: Verify the user's USDC transfer txHash on-chain!
-    console.log(`[Polymarket] Verifying user txHash securely: ${txHash}`);
-    try {
-      const receipt = await operatorWallet.provider.waitForTransaction(txHash, 1, 15000); // 15 seconds max
-      if (receipt.status !== 1) {
-        return res.status(400).json({ error: 'Transaction failed on Polygon network' });
-      }
-      console.log(`[Polymarket] ✅ txHash verified. Executing proxy order...`);
-    } catch (err) {
-      console.error(`[Polymarket] txHash verification error:`, err);
-      return res.status(400).json({ error: 'Could not verify the USDC transaction on-chain' });
-    }
+    // txHash is already verified above (receipt.status=1 + tx.from check)
+    console.log(`[Polymarket] ✅ Executing proxy order for user ${userId}...`);
 
     // Place the order securely using the proxy backend wallet
     const orderParams = {
@@ -162,6 +286,7 @@ router.post('/proxy-trade', requireAuth, async (req, res) => {
       CREATE TABLE IF NOT EXISTS earned_fees (
         id SERIAL PRIMARY KEY,
         user_id UUID NOT NULL,
+        token_id VARCHAR(255),
         trade_type VARCHAR(10) NOT NULL,
         trade_size DECIMAL(10, 4) NOT NULL,
         real_price DECIMAL(10, 4) NOT NULL,
@@ -173,10 +298,11 @@ router.post('/proxy-trade', requireAuth, async (req, res) => {
     `);
 
     await db.query(`
-      INSERT INTO earned_fees (user_id, trade_type, trade_size, real_price, user_price, fee_earned, hash)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      INSERT INTO earned_fees (user_id, token_id, trade_type, trade_size, real_price, user_price, fee_earned, hash)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
     `, [
       userId, 
+      tokenId,
       side, 
       size, 
       realPrice, 
