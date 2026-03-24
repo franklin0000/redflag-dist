@@ -8,7 +8,6 @@ export default function BottomNav() {
     const navItems = [
         { to: '/', icon: 'home', label: 'Home', match: (p) => p === '/' },
         { to: '/map', icon: 'map', label: 'Radar', match: (p) => p.startsWith('/map') },
-        { to: '/predictions', icon: 'trending_up', label: 'Markets', match: (p) => p.startsWith('/predictions') || p.startsWith('/portfolio') },
         { to: '/chat', icon: 'forum', label: 'Chat', match: (p) => p.startsWith('/chat') },
         { to: '/profile', icon: 'person', label: 'Profile', match: (p) => p.startsWith('/profile') },
     ];
@@ -22,15 +21,15 @@ export default function BottomNav() {
                 <div
                     className="absolute top-0 h-0.5 bg-primary rounded-full transition-all duration-300 ease-out pointer-events-none"
                     style={{
-                        width: '16.66%',
-                        left: activeIndex >= 3
-                            ? `${((activeIndex + 1) / 6) * 100}%`
-                            : `${(activeIndex / 6) * 100}%`,
+                        width: '20%',
+                        left: activeIndex >= 2
+                            ? `${((activeIndex + 1) / 5) * 100}%`
+                            : `${(activeIndex / 5) * 100}%`,
                         transform: 'translateX(30%)',
                     }}
                 />
 
-                {navItems.slice(0, 3).map(({ to, icon, label, match }) => {
+                {navItems.slice(0, 2).map(({ to, icon, label, match }) => {
                     const isActive = match(pathname);
                     return (
                         <Link key={to} to={to} className={`flex flex-col items-center justify-center w-full h-full transition-all duration-200 ${isActive ? 'text-primary scale-105' : 'text-gray-400 hover:text-gray-900 dark:hover:text-white active:scale-95'}`}>
@@ -44,7 +43,7 @@ export default function BottomNav() {
                         <span className="material-icons text-2xl">add</span>
                     </Link>
                 </div>
-                {navItems.slice(3).map(({ to, icon, label, match }) => {
+                {navItems.slice(2).map(({ to, icon, label, match }) => {
                     const isActive = match(pathname);
                     return (
                         <Link key={to} to={to} className={`flex flex-col items-center justify-center w-full h-full transition-all duration-200 ${isActive ? 'text-primary scale-105' : 'text-gray-400 hover:text-gray-900 dark:hover:text-white active:scale-95'}`}>

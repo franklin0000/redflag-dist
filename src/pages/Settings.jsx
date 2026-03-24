@@ -437,19 +437,7 @@ export default function Settings() {
                             </div>
                             <span className="material-icons text-gray-400 text-lg">chevron_right</span>
                         </button>
-                        <button
-                            onClick={() => navigate('/predictions')}
-                            className="w-full flex items-center gap-3 p-4 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
-                        >
-                            <div className="w-9 h-9 rounded-lg bg-[#d411b4]/15 flex items-center justify-center flex-shrink-0">
-                                <span className="text-lg">📈</span>
-                            </div>
-                            <div className="flex-1 text-left">
-                                <p className="text-sm font-medium text-gray-900 dark:text-white">Live Predictions</p>
-                                <p className="text-xs text-gray-400 mt-0.5">Trades en mercados Polymarket con USDC</p>
-                            </div>
-                            <span className="material-icons text-gray-400 text-lg">chevron_right</span>
-                        </button>
+
                         <button
                             onClick={() => window.open('/whitepaper.html', '_blank')}
                             className="w-full flex items-center gap-3 p-4 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"

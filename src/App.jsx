@@ -44,9 +44,6 @@ const RedFlagMap = React.lazy(() => import('./pages/RedFlagMap'));
 const SafetyHistory = React.lazy(() => import('./pages/SafetyHistory'));
 const VideoCall = React.lazy(() => import('./pages/VideoCall'));
 const TokenWallet = React.lazy(() => import('./pages/TokenWallet'));
-const Predictions = React.lazy(() => import('./pages/Predictions'));
-const MarketDetail = React.lazy(() => import('./pages/MarketDetail'));
-const Portfolio = React.lazy(() => import('./pages/Portfolio'));
 
 import { AuthProvider } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
@@ -256,21 +253,6 @@ function App() {
                     <Route path="/token" element={
                       <ProtectedRoute>
                         <TokenWallet />
-                      </ProtectedRoute>
-                    } />
-                    <Route path="/predictions" element={
-                      <ProtectedRoute>
-                        <Predictions />
-                      </ProtectedRoute>
-                    } />
-                    <Route path="/predictions/:id" element={
-                      <ProtectedRoute>
-                        <MarketDetail />
-                      </ProtectedRoute>
-                    } />
-                    <Route path="/portfolio" element={
-                      <ProtectedRoute>
-                        <Portfolio />
                       </ProtectedRoute>
                     } />
                     <Route path="/swarm" element={

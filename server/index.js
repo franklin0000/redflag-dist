@@ -176,7 +176,7 @@ app.use('/api/safety', safetyRouter);
 app.use('/api/twilio', require('./routes/twilio'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/places', require('./routes/places'));
-app.use('/api/polymarket', require('./routes/polymarket'));
+
 
 // ── File Upload (any route) ───────────────────────────────────
 const upload = require('./middleware/upload');
@@ -283,16 +283,8 @@ async function resolveMatchId(rawId, userId = null) {
 }
 
 // ── Socket.io — Real-time Chat ────────────────────────────────
-const onlineUsers = new Map(); // userId -> socketId
 
-// Housekeeping every hour — purge anon messages older than 24h
-setInterval(async () => {
-  try {
-    await db.query("DELETE FROM anon_messages WHERE created_at < NOW() - INTERVAL '24 hours'");
-  } catch (err) {
-    console.error('anon_messages cleanup error:', err.message);
-  }
-}, 60 * 60 * 1000);
+// Housekeeping movido a server/scripts/cron.js
 
 io.use(async (socket, next) => {
   try {
@@ -314,7 +306,6 @@ require('./ioRef').setIO(io);
 
 io.on('connection', (socket) => {
   const userId = socket.user.id;
-  onlineUsers.set(userId, socket.id);
   socket.join(`user:${userId}`); // Personal room for direct delivery (e.g. incoming calls)
   console.log(`User ${socket.user.name} connected`);
 
@@ -389,7 +380,8 @@ io.on('connection', (socket) => {
       // Send push notification to offline user
       const m = match.rows[0];
       const partnerId = m.user1_id === userId ? m.user2_id : m.user1_id;
-      if (!onlineUsers.has(partnerId)) {
+      const partnerSockets = await io.in(`user:${partnerId}`).fetchSockets();
+      if (partnerSockets.length === 0) {
         await db.query(
           `INSERT INTO notifications (user_id, type, title, body, data)
            VALUES ($1,'message',$2,'New message',$3)`,
@@ -546,7 +538,6 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
-    onlineUsers.delete(userId);
     console.log(`User ${socket.user.name} disconnected`);
   });
 });

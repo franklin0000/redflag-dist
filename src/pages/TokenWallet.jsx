@@ -46,9 +46,11 @@ export default function TokenWallet() {
     setLoading(false);
   }, [address]);
 
+  // eslint-disable-next-line
   useEffect(() => { loadData(); }, [loadData]);
 
   // Reload balance after successful transaction
+  // eslint-disable-next-line
   useEffect(() => {
     if (txSuccess) {
       loadData();
