@@ -165,6 +165,43 @@ export default function CommunityHub() {
                     );
                 })}
 
+                {/* Whitepaper card */}
+                <div
+                    onClick={() => navigate('/whitepaper')}
+                    className="relative group overflow-hidden rounded-3xl border border-[#d411b4]/20 bg-white dark:bg-[#1a1525] shadow-xl shadow-[#d411b4]/10 hover:-translate-y-1 hover:border-[#d411b4]/50 transition-all duration-300 cursor-pointer active:scale-[0.98]"
+                >
+                    <div className="p-5 relative z-10">
+                        <div className="flex items-center gap-4 mb-3">
+                            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#d411b4] to-purple-700 flex items-center justify-center text-white shadow-lg">
+                                <span className="material-icons text-2xl">article</span>
+                            </div>
+                            <div className="flex-1">
+                                <h3 className="text-lg font-bold">$RFLAG White Paper</h3>
+                                <p className="text-[11px] text-gray-400 font-medium uppercase tracking-wider">Token · Tokenomics · Roadmap</p>
+                            </div>
+                            <span className="material-icons text-gray-400 group-hover:text-primary transition-colors">chevron_right</span>
+                        </div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed mb-3">
+                            Learn about the $RFLAG token, security proofs, anti-rug measures, and the full roadmap for the RedFlag ecosystem.
+                        </p>
+                        <div className="flex items-center gap-4">
+                            <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                                <span className="material-icons text-sm">verified</span>
+                                <span>Ownership Renounced</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                                <span className="material-icons text-sm">lock</span>
+                                <span>LP Locked 2yr</span>
+                            </div>
+                            <div className="ml-auto flex items-center gap-1 text-xs text-[#d411b4]">
+                                <span className="font-bold">600B</span>
+                                <span className="text-gray-400">supply</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="absolute -right-6 -bottom-6 w-28 h-28 bg-gradient-to-br from-[#d411b4] to-purple-700 rounded-full blur-3xl opacity-10 group-hover:opacity-25 transition-opacity" />
+                </div>
+
                 {/* Sponsored Ad */}
                 <div className="pt-2">
                     <AdComponent slot="5748392810" format="fluid" layoutKey="-fb+5w+4e-db+86" />

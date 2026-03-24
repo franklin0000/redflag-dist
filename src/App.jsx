@@ -44,6 +44,7 @@ const RedFlagMap = React.lazy(() => import('./pages/RedFlagMap'));
 const SafetyHistory = React.lazy(() => import('./pages/SafetyHistory'));
 const VideoCall = React.lazy(() => import('./pages/VideoCall'));
 const TokenWallet = React.lazy(() => import('./pages/TokenWallet'));
+const Whitepaper = React.lazy(() => import('./pages/Whitepaper'));
 
 import { AuthProvider } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
@@ -265,6 +266,7 @@ function App() {
                         <VideoCall />
                       </ProtectedRoute>
                     } />
+                    <Route path="/whitepaper" element={<Whitepaper />} />
                   </Routes>
                 </AppShell>
               </AnimatePresence>
