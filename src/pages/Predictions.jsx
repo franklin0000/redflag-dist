@@ -1,106 +1,100 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
 import MarketCard from '../components/Polymarket/MarketCard';
-import Leaderboard from '../components/Polymarket/Leaderboard';
-import RflagBetting from '../components/Polymarket/RflagBetting';
-
-const API_BASE = import.meta.env.VITE_API_URL || '';
 
 export default function Predictions() {
   const [markets, setMarkets] = useState([]);
+  const [filter, setFilter] = useState('All');
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [filter, setFilter] = useState('all');
 
   useEffect(() => {
-    fetch(`${API_BASE}/api/polymarket/markets`)
-      .then(r => r.json())
-      .then(data => {
-        if (Array.isArray(data)) setMarkets(data);
-        else throw new Error(data.error || 'Failed to load markets');
-      })
-      .catch(err => setError(err.message))
-      .finally(() => setLoading(false));
+    const fetchMarkets = async () => {
+      try {
+        const url = import.meta.env.VITE_API_URL 
+          ? `${import.meta.env.VITE_API_URL}/api/polymarket/markets` 
+          : 'http://localhost:10000/api/polymarket/markets';
+        const res = await fetch(url);
+        const data = await res.json();
+        
+        setMarkets(Array.isArray(data) ? data : data.events || data.markets || []);
+      } catch (err) {
+        console.error('Failed to fetch markets', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchMarkets();
   }, []);
 
-  const filtered = markets.filter(m => {
-    if (filter === 'social') return /swift|kelce|celeb|date|love|marry|relationship|singer|actor|actress/i.test(m.title);
-    if (filter === 'crypto') return /bitcoin|btc|eth|crypto|defi|nft|polygon|matic/i.test(m.title);
-    if (filter === 'sport') return /nba|nfl|soccer|sport|game|champion/i.test(m.title);
-    return true;
-  });
+  const FILTERS = [
+    { id: 'All', icon: '🔥', label: 'All' },
+    { id: 'Social', icon: '💃', label: 'Social' },
+    { id: 'Crypto', icon: '🪙', label: 'Crypto' },
+    { id: 'Sport', icon: '🏆', label: 'Sport' }
+  ];
 
   return (
-    <div className="min-h-screen bg-gray-950 pb-24 px-4 pt-6">
-      {/* Header */}
-      <div className="max-w-xl mx-auto mb-6">
-        <div className="flex items-center gap-3 mb-1">
-          <span className="text-3xl">📈</span>
-          <h1 className="text-2xl font-extrabold text-white">Live Predictions</h1>
-        </div>
-        <p className="text-gray-400 text-sm">
-          Trade on real-world outcomes using USDC on Polygon. Powered by{' '}
-          <span className="text-pink-400 font-semibold">Polymarket</span>.
-        </p>
-      </div>
+    <div className="min-h-screen bg-[#0a0a0c] bg-opacity-100 text-white relative">
+       {/* Ambient Backlight for super premium vibe */}
+       <div className="absolute top-0 inset-x-0 h-96 bg-gradient-to-b from-pink-900/20 via-purple-900/10 to-transparent pointer-events-none" />
+       
+       {/* Sticky Premium Header */}
+       <div className="pt-12 pb-4 px-5 border-b border-white/[0.04] bg-black/40 sticky top-0 z-30 backdrop-blur-2xl">
+         <motion.h1 
+           initial={{ opacity: 0, x: -20 }}
+           animate={{ opacity: 1, x: 0 }}
+           className="text-3xl font-black mb-6 flex items-center gap-3 tracking-tight"
+         >
+           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center shadow-lg shadow-pink-500/30">
+             <span className="material-icons text-white">ssid_chart</span>
+           </div>
+           <span className="bg-gradient-to-r from-white via-gray-100 to-gray-400 bg-clip-text text-transparent">
+             Live Markets
+           </span>
+         </motion.h1>
+         
+         {/* Sleek Pills */}
+         <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-none">
+           {FILTERS.map(f => (
+             <button 
+               key={f.id}
+               onClick={() => setFilter(f.id)}
+               className={`flex items-center gap-2 px-5 py-2.5 rounded-full whitespace-nowrap font-semibold text-sm transition-all duration-300 ${
+                 filter === f.id 
+                   ? 'bg-white text-black shadow-lg shadow-white/20 scale-105' 
+                   : 'bg-white/5 text-gray-400 hover:bg-white/10 border border-white/5'
+               }`}
+             >
+               <span>{f.icon}</span> {f.label}
+             </button>
+           ))}
+         </div>
+       </div>
 
-      {/* Filter tabs */}
-      <div className="max-w-xl mx-auto flex gap-2 mb-6 flex-wrap">
-        {['all', 'social', 'crypto', 'sport'].map(f => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={`px-4 py-1.5 rounded-full text-sm font-semibold capitalize transition-colors ${
-              filter === f
-                ? 'bg-pink-600 text-white'
-                : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
-            }`}
-          >
-            {f === 'all' ? '🔥 All Markets' : f === 'social' ? '💃 Social' : f === 'crypto' ? '🪙 Crypto' : '🏆 Sport'}
-          </button>
-        ))}
-      </div>
-
-      {/* Content */}
-      <div className="max-w-xl mx-auto">
-        {loading && (
-          <div className="flex flex-col items-center gap-3 py-16">
-            <div className="w-8 h-8 border-4 border-pink-500 border-t-transparent rounded-full animate-spin" />
-            <span className="text-gray-400 text-sm">Loading markets...</span>
-          </div>
-        )}
-
-        {error && (
-          <div className="bg-red-900/20 border border-red-500/30 rounded-xl p-4 text-red-400 text-sm text-center">
-            {error}
-          </div>
-        )}
-
-        {!loading && !error && filtered.length === 0 && (
-          <div className="text-gray-500 text-center py-12">No markets found for this filter.</div>
-        )}
-
-        {!loading && !error && filtered.map(market => (
-          <MarketCard key={market.id} market={market} />
-        ))}
-
-        {/* $RFLAG fallback section */}
-        {!loading && (
-          <div className="mt-10 border-t border-gray-800 pt-8">
-            <h2 className="text-lg font-bold text-white mb-2 flex items-center gap-2">
-              <span>🚩</span> Bet with $RFLAG
-            </h2>
-            <p className="text-gray-400 text-xs mb-4">Use your $RFLAG tokens on community-created markets.</p>
-            <RflagBetting eventName="Next RedFlag community event" />
-          </div>
-        )}
-
-        {/* Leaderboard */}
-        {!loading && (
-          <div className="mt-8">
-            <Leaderboard />
-          </div>
-        )}
-      </div>
+       {/* Content Feed */}
+       <div className="p-5 flex flex-col items-center">
+         {loading ? (
+             <div className="flex flex-col items-center justify-center h-64 opacity-60">
+               <div className="w-12 h-12 border-4 border-pink-500 border-t-transparent rounded-full animate-spin mb-4" />
+               <p className="font-bold tracking-widest uppercase text-xs text-pink-500">Synchronizing Oracle</p>
+             </div>
+         ) : markets.length > 0 ? (
+           <div className="w-full max-w-lg grid gap-8 pb-24 mx-auto">
+             {markets.map((m, idx) => (
+               <MarketCard key={m.id || idx} market={m} filter={filter} />
+             ))}
+           </div>
+         ) : (
+           <motion.div 
+             initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+             className="text-center text-gray-500 py-16 mt-10 bg-white/5 rounded-3xl border border-white/5 w-full max-w-sm"
+           >
+             <span className="material-icons text-6xl mb-4 text-gray-600">cloud_off</span>
+             <p className="font-semibold text-lg text-white">Network Congestion</p>
+             <p className="text-sm mt-2 px-6 leading-relaxed">Oracle markets are currently refreshing. Please verify your connection.</p>
+           </motion.div>
+         )}
+       </div>
     </div>
   );
 }

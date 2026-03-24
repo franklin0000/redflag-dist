@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { parseUnits } from 'viem';
 
@@ -47,34 +47,20 @@ export default function TradeModal({ market, yesPrice, noPrice, onClose }) {
   const markupFee = 0.015; // 1.5% transparency
   const totalCost = side === 'BUY' ? size * activePrice : size * activePrice; // simpler logic
 
-  const handleExecute = async () => {
-    if (!address) {
-      setError("Please connect your wallet first.");
-      return;
+  // Execute Proxy once the transaction is fully confirmed on the blockchain
+  useEffect(() => {
+    if (isConfirmed && hash) {
+      executeProxyTrade(hash);
     }
-    setError(null);
-    setLoading(true);
+  }, [isConfirmed, hash]);
 
+  const executeProxyTrade = async (txHash) => {
     try {
-      // Step 1: Transfer USDC to backend proxy wallet
-      const usdcAmount = parseUnits(totalCost.toFixed(6), 6);
-
-      // writeContractAsync returns a tx hash after wallet confirms
-      const txHash = await writeContract({
-        address: USDC_ADDRESS,
-        abi: erc20Abi,
-        functionName: 'transfer',
-        args: [PROXY_OPERATOR_WALLET, usdcAmount],
-      });
-
-      if (!txHash) throw new Error("USDC transfer was rejected or failed.");
-
-      // Step 2: Call proxy API — pass txHash so server can verify on-chain
       const proxyUrl = import.meta.env.VITE_API_URL
         ? `${import.meta.env.VITE_API_URL}/api/polymarket/proxy-trade`
         : '/api/polymarket/proxy-trade';
 
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('token') || localStorage.getItem('rf_token');
       const response = await fetch(proxyUrl, {
         method: 'POST',
         headers: {
@@ -100,6 +86,30 @@ export default function TradeModal({ market, yesPrice, noPrice, onClose }) {
     } catch (err) {
       setError(err.message);
     } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleExecute = async () => {
+    if (!address) {
+      setError("Please connect your wallet first.");
+      return;
+    }
+    setError(null);
+    setLoading(true);
+
+    try {
+      // Step 1: Transfer USDC to backend proxy wallet
+      const usdcAmount = parseUnits(totalCost.toFixed(6), 6);
+      writeContract({
+        address: USDC_ADDRESS,
+        abi: erc20Abi,
+        functionName: 'transfer',
+        args: [PROXY_OPERATOR_WALLET, usdcAmount],
+      });
+      // Flow continues in the useEffect hook when the wallet confirms the tx
+    } catch (err) {
+      setError(err.message);
       setLoading(false);
     }
   };
