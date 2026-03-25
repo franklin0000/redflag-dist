@@ -263,6 +263,41 @@ export default function Home() {
                 </button>
             </section>
 
+            {/* $RFLAG Token Banner */}
+            <section className="px-5 mb-8">
+                <button
+                    onClick={() => navigate('/whitepaper')}
+                    className="w-full relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#1a0a17] via-[#2d1028] to-[#1a0a17] border border-[#d411b4]/30 shadow-xl shadow-[#d411b4]/10 group hover:border-[#d411b4]/60 transition-all duration-300 active:scale-[0.98]"
+                >
+                    {/* Glow blobs */}
+                    <div className="absolute -left-10 -top-10 w-40 h-40 bg-[#d411b4]/20 rounded-full blur-3xl pointer-events-none" />
+                    <div className="absolute -right-10 -bottom-10 w-40 h-40 bg-purple-700/20 rounded-full blur-3xl pointer-events-none" />
+
+                    <div className="relative z-10 flex items-center gap-4 p-4">
+                        {/* Token logo circle */}
+                        <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#d411b4] to-purple-700 flex items-center justify-center flex-shrink-0 shadow-lg shadow-[#d411b4]/30 group-hover:scale-105 transition-transform">
+                            <span className="text-white font-black text-lg">$RF</span>
+                        </div>
+
+                        <div className="flex-1 text-left">
+                            <div className="flex items-center gap-2 mb-0.5">
+                                <span className="text-white font-bold text-base">$RFLAG Token</span>
+                                <span className="text-[10px] bg-green-500/20 text-green-400 border border-green-500/30 rounded-full px-2 py-0.5 font-medium">LIVE</span>
+                            </div>
+                            <p className="text-[11px] text-[#b090b0] leading-snug">600B supply · Ownership renounced · LP locked 2yr</p>
+                            <p className="text-[10px] text-[#d411b4] mt-1 font-medium">Tap to read the full White Paper →</p>
+                        </div>
+
+                        <div className="flex flex-col items-end gap-1">
+                            <span className="text-[10px] text-[#7a5a77] uppercase tracking-wider">Polygon</span>
+                            <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center group-hover:bg-[#d411b4]/20 transition-colors">
+                                <span className="material-icons text-[#d411b4] text-base">arrow_forward_ios</span>
+                            </div>
+                        </div>
+                    </div>
+                </button>
+            </section>
+
             {/* Stats Dashboard */}
             <section className="px-5 mb-8">
                 <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4 px-1">Your Dashboard</h3>
