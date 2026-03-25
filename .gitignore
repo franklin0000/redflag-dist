@@ -19,8 +19,9 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
-dist
-dist-ssr
+# dist committed for pipeline-free deploy (Render free tier has 0 build minutes)
+# dist
+# dist-ssr
 *.local
 
 # Editor directories and files
@@ -35,5 +36,6 @@ dist-ssr
 *.sw?
 nohup.out
 test_*.js
-dist
-dist-ssr
+# dist committed for pipeline-free deploy
+# dist
+# dist-ssr
