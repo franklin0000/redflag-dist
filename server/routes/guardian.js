@@ -68,20 +68,69 @@ router.get('/view/:token', async (req, res) => {
   }
 });
 
-// PATCH /api/guardian/sessions/:id/location — update GPS
+// ── DIO-LEVEL ARCHITECTURE: PREDICTIVE GEOFENCING ──────────────
+function getDistanceMeters(lat1, lon1, lat2, lon2) {
+  const R = 6371e3;
+  const p1 = lat1 * Math.PI/180, p2 = lat2 * Math.PI/180;
+  const dp = (lat2-lat1) * Math.PI/180, dl = (lon2-lon1) * Math.PI/180;
+  const a = Math.sin(dp/2) * Math.sin(dp/2) + Math.cos(p1) * Math.cos(p2) * Math.sin(dl/2) * Math.sin(dl/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c;
+}
+
+// PATCH /api/guardian/sessions/:id/location — update GPS with Geofencing
 router.patch('/sessions/:id/location', requireAuth, async (req, res) => {
   const { lat, lng } = req.body;
   if (lat == null || lng == null) return res.status(400).json({ error: 'lat and lng required' });
+  
   try {
+    // 1. Fetch current session state for geofence analysis
+    const { rows: currentSession } = await db.query(
+      'SELECT location, is_sos FROM guardian_sessions WHERE id=$1 AND dater_id=$2',
+      [req.params.id, req.user.id]
+    );
+
+    if (!currentSession.length) return res.status(404).json({ error: 'Session not found' });
+    const session = currentSession[0];
+
+    let triggerAutoSos = false;
+    let newSentiment = 'normal';
+
+    // Predictive deviation logic: If a previous location exists and the user suddenly jumps > 200m
+    // away from their last safe point in a single ping (possible kidnapping/forced vehicle entry).
+    // In a full implementation, this compares against Polyline route coordinates.
+    if (session.location) {
+      try {
+        const lastLoc = typeof session.location === 'string' ? JSON.parse(session.location) : session.location;
+        if (lastLoc.lat && lastLoc.lng) {
+          const dist = getDistanceMeters(lat, lng, lastLoc.lat, lastLoc.lng);
+          if (dist > 200 && !session.is_sos) {
+             triggerAutoSos = true;
+             newSentiment = 'critical_deviation';
+             console.warn(`[DIO Security] Predictive Geofence Alert: User deviated ${Math.round(dist)}m suddenly.`);
+          }
+        }
+      } catch (e) { /* ignore parse errors */ }
+    }
+
     const { rows } = await db.query(
       `UPDATE guardian_sessions
-       SET location=$1, last_checkin_at=NOW()
+       SET location=$1, 
+           last_checkin_at=NOW(),
+           is_sos = CASE WHEN $4::boolean = TRUE THEN TRUE ELSE is_sos END,
+           sentiment = CASE WHEN $4::boolean = TRUE THEN $5 ELSE sentiment END
        WHERE id=$2 AND dater_id=$3 RETURNING *`,
-      [JSON.stringify({ lat, lng, updatedAt: new Date().toISOString() }), req.params.id, req.user.id]
+      [JSON.stringify({ lat, lng, updatedAt: new Date().toISOString() }), req.params.id, req.user.id, triggerAutoSos, newSentiment]
     );
-    if (!rows.length) return res.status(404).json({ error: 'Session not found' });
-    if (_io) _io.to(`guardian:${rows[0].session_token}`).emit('guardian:location', { lat, lng });
-    res.json({ ok: true });
+
+    if (_io) {
+      _io.to(`guardian:${rows[0].session_token}`).emit('guardian:location', { lat, lng, alert: triggerAutoSos });
+      if (triggerAutoSos) {
+         _io.to(`guardian:${rows[0].session_token}`).emit('guardian:sos', { session: rows[0], reason: 'Geofence Deviation > 200m' });
+      }
+    }
+    
+    res.json({ ok: true, autoSosTriggered: triggerAutoSos });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

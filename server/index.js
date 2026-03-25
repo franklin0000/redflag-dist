@@ -4,7 +4,6 @@ const http = require('http');
 const { Server: SocketIO } = require('socket.io');
 const cors = require('cors');
 const path = require('path');
-const crypto = require('crypto');
 const fetch = require('node-fetch');
 
 const app = express();
@@ -35,6 +34,7 @@ app.use(cors({
 
 // ── Stripe Webhook (raw body MUST come before express.json) ───
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY || 'sk_test_placeholder');
+const { stripeQueue } = require('./services/stripeQueue');
 app.post('/api/webhook/stripe',
   express.raw({ type: 'application/json' }),
   async (req, res) => {
@@ -48,45 +48,40 @@ app.post('/api/webhook/stripe',
       console.error('Stripe webhook signature failed:', err.message);
       return res.status(400).send(`Webhook Error: ${err.message}`);
     }
+
     try {
-      switch (event.type) {
-        case 'payment_intent.succeeded': {
-          const pi = event.data.object;
-          // Mark user subscription as paid if metadata contains userId
-          if (pi.metadata?.userId) {
-            await db.query(
-              'UPDATE users SET is_paid = TRUE WHERE id = $1',
-              [pi.metadata.userId]
-            );
-            console.log(`✅ Stripe: user ${pi.metadata.userId} marked as paid`);
-          }
-          break;
-        }
-        case 'customer.subscription.deleted':
-        case 'customer.subscription.updated': {
-          const sub = event.data.object;
-          if (sub.metadata?.userId) {
-            const isPaid = sub.status === 'active' || sub.status === 'trialing';
-            await db.query(
-              'UPDATE users SET is_paid = $1 WHERE id = $2',
-              [isPaid, sub.metadata.userId]
-            );
-            console.log(`✅ Stripe: subscription ${sub.status} for user ${sub.metadata.userId}`);
-          }
-          break;
-        }
-        default:
-          // Ignore unhandled event types
-          break;
-      }
+      // ── DIO-LEVEL ARCHITECTURE: BACKGROUND WORK QUEUE ────────
+      await stripeQueue.add('process-webhook', { event }, {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 2000 }
+      });
+
+      console.log(`[Stripe Queue] Enqueued event ${event.type} for non-blocking processing.`);
+      return res.status(200).json({ received: true });
+
     } catch (err) {
-      console.error('Stripe webhook handler error:', err.message);
+      console.error('Stripe webhook enqueue error:', err.message);
+      return res.status(500).json({ error: 'Failed to enqueue webhook' });
     }
-    res.json({ received: true });
   }
 );
 
 app.use(express.json({ limit: '10mb' }));
+
+// ── DIO-LEVEL ARCHITECTURE: DATA MINIMIZATION ─────────────────
+// Eliminates IP, User-Agent, and identifying fingerprints from headers
+// before any route or downstream middleware can log them.
+app.use((_req, _res, next) => {
+  delete _req.headers['x-forwarded-for'];
+  delete _req.headers['x-real-ip'];
+  delete _req.headers['user-agent'];
+  delete _req.headers['via'];
+  // req.connection is deprecated in Node ≥13; req.socket is the modern equivalent
+  if (_req.socket) delete _req.socket.remoteAddress;
+  _req.ip = '0.0.0.0';
+  _req.ips = [];
+  next();
+});
 
 // ── Serve React frontend (dist/) ──────────────────────────────
 const DIST   = path.join(__dirname, '..', 'dist');
@@ -107,7 +102,7 @@ app.use(express.static(DIST, {
 }));
 
 // ── Health check ──────────────────────────────────────────────
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '2.0' }));
+app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 
 // ── Handshake / Web3 domain verification ──────────────────────
 // Serves the IPFS CID and HIP-2 record for .web3 / .brave / .og / .u resolution.
@@ -226,27 +221,13 @@ app.post('/api/payment-intent', require('./middleware/auth').requireAuth, async 
   }
 });
 
-// ── Sumsub KYC Token ─────────────────────────────────────────
-const SUMSUB_APP_TOKEN = process.env.SUMSUB_APP_TOKEN;
-const SUMSUB_SECRET_KEY = process.env.SUMSUB_SECRET_KEY;
+// ── DIO-LEVEL ARCHITECTURE: MULTI-PROVIDER KYC ────────────────
+const { getKycSession } = require('./services/kyc');
 app.post('/api/sumsub-token', require('./middleware/auth').requireAuth, async (req, res) => {
-  const { levelName = 'basic-kyc-level' } = req.body;
   const userId = req.user.id;
   try {
-    const ts = Math.floor(Date.now() / 1000);
-    const path_ = `/resources/accessTokens?userId=${userId}&levelName=${levelName}`;
-    const sig = crypto.createHmac('sha256', SUMSUB_SECRET_KEY || '');
-    sig.update(ts + 'POST' + path_);
-    const headers = {
-      'X-App-Token': SUMSUB_APP_TOKEN,
-      'X-App-Access-Ts': ts.toString(),
-      'X-App-Access-Sig': sig.digest('hex'),
-      'Content-Type': 'application/json',
-    };
-    const r = await fetch('https://api.sumsub.com' + path_, { method: 'POST', headers });
-    const json = await r.json();
-    if (!r.ok) return res.status(502).json({ error: json.description || 'Sumsub error' });
-    res.json({ token: json.token, userId });
+    const kycSession = await getKycSession(userId);
+    res.json({ token: kycSession.token, provider: kycSession.provider, userId });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -289,14 +270,21 @@ async function resolveMatchId(rawId, userId = null) {
 io.use(async (socket, next) => {
   try {
     const token = socket.handshake.auth.token;
-    if (!token) return next(new Error('No token'));
+    if (!token) return next(new Error('No token provided'));
     const payload = jwt.verify(token, JWT_SECRET);
-    const { rows } = await db.query('SELECT id, name FROM users WHERE id=$1', [payload.sub]);
+    const { rows } = await db.query(
+      `SELECT u.id, u.name, dp.gender, dp.gender_verified
+       FROM users u
+       LEFT JOIN dating_profiles dp ON dp.user_id = u.id
+       WHERE u.id = $1`,
+      [payload.sub]
+    );
     if (!rows.length) return next(new Error('User not found'));
     socket.user = rows[0];
     next();
   } catch (err) {
-    next(new Error('Auth failed'));
+    console.error('[Socket.io] Auth error:', err.message);
+    next(new Error(err.name === 'JsonWebTokenError' ? 'Invalid token' : 'Auth failed'));
   }
 });
 
@@ -489,8 +477,8 @@ io.on('connection', (socket) => {
     } catch (err) { }
   });
 
-  socket.on('leave_video_call', async (matchId) => {
-    const callRoom = `video_call:${matchId}`;
+  socket.on('leave_video_call', async (rawMatchId) => {
+    const callRoom = `video_call:${rawMatchId}`;
     socket.leave(callRoom);
     try {
       const roomSockets = await io.in(callRoom).fetchSockets();
@@ -522,7 +510,6 @@ io.on('connection', (socket) => {
         setTimeout(() => verifyAndEmitParticipants(io, matchId), 100);
       }
       if (room.startsWith('video_call:')) {
-        const matchId = room.split(':')[1];
         setTimeout(async () => {
           try {
             const roomSockets = await io.in(room).fetchSockets();
@@ -543,7 +530,7 @@ io.on('connection', (socket) => {
 });
 
 // ── Catch-all → React app ─────────────────────────────────────
-app.get('*', (req, res) => {
+app.get('*', (_req, res) => {
   res.sendFile(path.join(DIST, 'index.html'));
 });
 

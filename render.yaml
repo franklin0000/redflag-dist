@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: redflag-source
+    runtime: node
+    region: oregon
+    plan: starter
+    buildCommand: ""
+    startCommand: cd server && npm install --production && node index.js
+    autoDeploy: true

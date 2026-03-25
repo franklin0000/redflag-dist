@@ -68,7 +68,8 @@ router.patch('/me', requireAuth, async (req, res) => {
          is_paid = COALESCE($8, is_paid),
          is_verified_web3 = COALESCE($9, is_verified_web3),
          wallet_address = COALESCE($10, wallet_address),
-         last_seen = NOW()
+         last_seen = NOW(),
+         geom = CASE WHEN $4::float IS NOT NULL AND $5::float IS NOT NULL THEN ST_SetSRID(ST_MakePoint($5, $4), 4326) ELSE geom END
        WHERE id = $11 RETURNING id, name, username, avatar_url, bio, is_paid, is_verified,
          is_verified_web3, safety_score, location, lat, lng, email, wallet_address, created_at`,
       [name, bio, location, lat, lng, avatar_url, photo_url, is_paid, is_verified_web3, wallet_address, req.user.id]
@@ -138,6 +139,17 @@ router.post('/verify-gender', requireAuth, (req, res, next) => {
 
   if (fileSize < 5000) {
     return res.status(422).json({ error: 'La selfie no es válida. Por favor toma una foto clara de tu cara.' });
+  }
+
+  // ── DIO-LEVEL ARCHITECTURE: LIVENESS DETECTION ─────────────────
+  const { checkLivenessLocal } = require('../services/liveness');
+  try {
+    const liveness = await checkLivenessLocal(selfiePath);
+    if (!liveness.isLive) {
+      return res.status(422).json({ error: 'Liveness check failed. Spoofing attempt detected.' });
+    }
+  } catch(err) {
+    return res.status(500).json({ error: 'Error processing local liveness detection' });
   }
 
   // Get declared gender from dating_profiles

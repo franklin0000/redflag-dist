@@ -1,27 +1,19 @@
-# Use Node.js 20 explicitly as base image
+# Pre-built image — dist/ is built locally, no pipeline build needed
 FROM node:20-alpine
 
-# Set working directory
 WORKDIR /app
 
-# Copy root package.json for frontend build
-COPY package*.json ./
-# Install frontend dependencies
-RUN npm ci --include=dev
+# Install server dependencies first (cached layer)
+COPY server/package.json ./server/
+RUN cd server && npm install --production
 
-# Copy server package.json
-COPY server/package*.json ./server/
-# Install server dependencies
-RUN cd server && npm ci
+# Copy pre-built frontend and all server code
+COPY dist/ ./dist/
+COPY public/ ./public/
+COPY server/ ./server/
 
-# Copy entire application
-COPY . .
-
-# Build the frontend (Vite)
-RUN npm run build
-
-# Expose backend port
 EXPOSE 10000
+ENV PORT=10000
+ENV NODE_ENV=production
 
-# Start the server (which serves the frontend from dist/)
 CMD ["node", "server/index.js"]

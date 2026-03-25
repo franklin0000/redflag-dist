@@ -14,6 +14,12 @@ const pool = new Pool({
 
 pool.on('error', (err) => {
   console.error('PostgreSQL pool error:', err.message);
+  // Fatal connection errors — let the process manager (Render) restart the service
+  const FATAL_CODES = ['ECONNREFUSED', 'ETIMEDOUT', '57P01', '57P02', '57P03'];
+  if (FATAL_CODES.includes(err.code)) {
+    console.error('[DB] Fatal error, shutting down for restart:', err.code);
+    process.exit(1);
+  }
 });
 
 module.exports = {

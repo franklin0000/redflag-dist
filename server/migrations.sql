@@ -120,6 +120,9 @@ ALTER TABLE dating_profiles ADD COLUMN IF NOT EXISTS gender_verified BOOLEAN DEF
 ALTER TABLE dating_profiles ADD COLUMN IF NOT EXISTS gender_verified_at TIMESTAMPTZ;
 ALTER TABLE dating_profiles ADD COLUMN IF NOT EXISTS gender_confidence NUMERIC(5,2);
 
+-- Edit token for ephemeral report evidence upload (no auth required for evidence upload)
+ALTER TABLE reports ADD COLUMN IF NOT EXISTS edit_token TEXT;
+
 -- Location flags (RedFlagMap) — in case schema.sql wasn't run fresh
 CREATE TABLE IF NOT EXISTS location_flags (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),

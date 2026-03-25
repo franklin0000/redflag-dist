@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const db = require('../db');
 const { requireAuth } = require('../middleware/auth');
+const { encryptMessage, decryptMessage } = require('../services/e2ee');
 
 // ── Helper: resolve composite "uuid_uuid" matchId to actual match UUID ──────
 // DatingChat constructs matchId as [user.id, partnerId].sort().join('_').
@@ -275,7 +276,19 @@ router.get('/messages/:matchId', requireAuth, async (req, res) => {
        ORDER BY created_at ASC`,
       [matchId]
     );
-    res.json(rows);
+
+    // ── DIO-LEVEL ARCHITECTURE: DECRYPT SIGNAL PAYLOADS ─────────
+    const decryptedRows = await Promise.all(rows.map(async msg => {
+      try {
+        const partnerId = msg.sender_id === req.user.id ? req.user.id : msg.sender_id;
+        msg.content = await decryptMessage(req.user.id, partnerId, { body: msg.content });
+      } catch (err) {
+        msg.content = '[Encrypted Message - Unreadable]';
+      }
+      return msg;
+    }));
+
+    res.json(decryptedRows);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -294,20 +307,30 @@ router.post('/messages/:matchId', requireAuth, async (req, res) => {
     );
     if (!match.rows.length) return res.status(403).json({ error: 'Not your match' });
 
+    const matchRow = match.rows[0];
+    const partnerId = matchRow.user1_id === req.user.id ? matchRow.user2_id : matchRow.user1_id;
+
+    // ── DIO-LEVEL ARCHITECTURE: ENCRYPT SIGNAL PAYLOADS ─────────
+    const e2ePayload = await encryptMessage(req.user.id, partnerId, content);
+
     const { rows } = await db.query(
       `INSERT INTO messages (match_id, sender_id, content, iv)
        VALUES ($1,$2,$3,$4) RETURNING *`,
-      [matchId, req.user.id, content, iv || null]
+      [matchId, req.user.id, e2ePayload.body, iv || null]
     );
-    const message = rows[0];
+    let message = rows[0];
 
     await db.query(
       `UPDATE matches SET last_message=$1, last_message_at=NOW() WHERE id=$2`,
-      [content.substring(0, 100), matchId]
+      ['[Encrypted Message]', matchId]
     );
 
     // Broadcast to Socket.io so recipients see it in real-time
     const { getIO } = require('../ioRef');
+    
+    // Decrypt the ephemeral emit payload for the active socket session so clients can read it
+    message.content = content; 
+
     getIO()?.to(`match:${matchId}`).emit('new_message', { ...message, match_id: matchId, room_id: req.params.matchId });
 
     res.status(201).json(message);

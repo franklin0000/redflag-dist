@@ -2,6 +2,7 @@ const router = require('express').Router();
 const db = require('../db');
 const { requireAuth, optionalAuth } = require('../middleware/auth');
 const { getIO } = require('../ioRef');
+const { postAnonymousMessage, getAnonymousMessages } = require('../services/anonymousRoom');
 
 // ── Gender Room Access Control ────────────────────────────────────────────────
 // 'women' room → female only | 'men' room → male only | others → open
@@ -40,13 +41,30 @@ router.get('/', optionalAuth, async (req, res) => {
 
   const isGenderRoom = !!ROOM_GENDER[room_id];
 
+  // ── DIO-LEVEL ARCHITECTURE: REDIS EPHEMERAL FETCH ───────────
+  if (isGenderRoom) {
+    try {
+      const anonPosts = await getAnonymousMessages(room_id);
+      return res.json(anonPosts.reverse().map(p => ({
+        id: p.id,
+        content: p.content,
+        created_at: new Date(p.createdAt).toISOString(),
+        reactions: { '❤️':0, '🚩':0, '👀':0, '🤮':0 },
+        replies: [],
+        name: null,
+        avatar_url: null,
+        is_verified: false
+      })));
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
   try {
     const params = [parseInt(limit), parseInt(offset)];
     const conditions = [];
     if (user_id) { params.push(user_id); conditions.push(`p.user_id = $${params.length}`); }
     if (room_id) { params.push(room_id); conditions.push(`p.room_id = $${params.length}`); }
-    // Gender rooms: only show posts from the last 24 hours (auto-expire)
-    if (isGenderRoom) conditions.push(`p.created_at > NOW() - INTERVAL '24 hours'`);
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
     // Gender rooms: never expose the poster's identity (strip name/avatar)
     const userSelect = isGenderRoom
@@ -74,6 +92,32 @@ router.post('/', requireAuth, async (req, res) => {
   const denied = roomAccessDenied(req.user, room_id);
   if (denied) return res.status(403).json({ error: denied });
 
+  // ── DIO-LEVEL ARCHITECTURE: REDIS EPHEMERAL STORAGE ───────────
+  if (ROOM_GENDER[room_id]) {
+    try {
+      const p = await postAnonymousMessage(room_id, content);
+      const post = {
+         id: p.id,
+         content: p.content,
+         media_url: media_url || null,
+         media_type: media_type || null,
+         media_name: media_name || null,
+         created_at: new Date(p.createdAt).toISOString(),
+         reactions: { '❤️':0, '🚩':0, '👀':0, '🤮':0 },
+         replies: [],
+         name: null,
+         avatar_url: null,
+         is_verified: false,
+         room_id
+      };
+      res.status(201).json(post);
+      getIO()?.to(`community:${room_id}`).emit('new_community_post', post);
+      return;
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
   try {
     const { rows } = await db.query(
       `INSERT INTO posts (user_id, content, media_url, media_type, media_name, room_id)
@@ -97,6 +141,14 @@ router.post('/', requireAuth, async (req, res) => {
 
 // DELETE /api/posts/:id
 router.delete('/:id', requireAuth, async (req, res) => {
+  // Try to delete from Redis if it's an ephemeral post (Redis doesn't map ownership right now, but for this POC we drop it)
+  if (req.params.id.startsWith('msg:')) {
+    const { redis } = require('../services/anonymousRoom');
+    // We don't know the room_id from the params here, so we skip auth-check deletion for memory 
+    // unless strictly necessary. Post-anonymity means authors can't delete their own anonymous posts either.
+    return res.status(403).json({ error: 'Anonymous posts cannot be manually deleted.' });
+  }
+
   try {
     const { rowCount } = await db.query(
       'DELETE FROM posts WHERE id = $1 AND user_id = $2',

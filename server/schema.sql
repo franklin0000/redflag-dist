@@ -160,7 +160,18 @@ CREATE INDEX IF NOT EXISTS idx_reports_created ON reports(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, is_read, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_swipes_swiper ON swipes(swiper_id);
 
--- ── GEO MATCH FUNCTION ────────────────────────────────────────
+-- ── DIO-LEVEL ARCHITECTURE: POSTGIS GEO MATCH FUNCTION ────────────
+-- 1. Enable Spatial Extensions
+CREATE EXTENSION IF NOT EXISTS postgis;
+
+-- 2. Ensure Geometry columns exist for spatial indexing
+ALTER TABLE users ADD COLUMN IF NOT EXISTS geom GEOGRAPHY(Point, 4326);
+ALTER TABLE dating_profiles ADD COLUMN IF NOT EXISTS geom GEOGRAPHY(Point, 4326);
+
+CREATE INDEX IF NOT EXISTS idx_users_geom ON users USING GIST (geom);
+CREATE INDEX IF NOT EXISTS idx_dating_profiles_geom ON dating_profiles USING GIST (geom);
+
+-- 3. High-Performance Spatial Query replacing Haversine
 CREATE OR REPLACE FUNCTION get_matches_by_distance(
   p_user_id UUID,
   p_lat DOUBLE PRECISION,
@@ -173,37 +184,27 @@ CREATE OR REPLACE FUNCTION get_matches_by_distance(
   location TEXT, lat DOUBLE PRECISION, lng DOUBLE PRECISION,
   distance_km DOUBLE PRECISION, gender TEXT
 ) AS $$
+DECLARE
+  p_geom GEOGRAPHY = ST_SetSRID(ST_MakePoint(p_lng, p_lat), 4326);
 BEGIN
   RETURN QUERY
   SELECT
     u.id, u.name, dp.age, dp.bio,
     dp.photos, dp.interests, dp.safety_score,
     dp.location, dp.lat, dp.lng,
-    ROUND((6371 * acos(
-      LEAST(1.0, GREATEST(-1.0,
-        cos(radians(p_lat)) * cos(radians(dp.lat)) *
-        cos(radians(dp.lng) - radians(p_lng)) +
-        sin(radians(p_lat)) * sin(radians(dp.lat))
-      ))
-    ))::numeric, 1)::DOUBLE PRECISION AS distance_km,
+    (ST_Distance(dp.geom, p_geom) / 1000.0)::DOUBLE PRECISION AS distance_km,
     dp.gender
   FROM dating_profiles dp
   JOIN users u ON u.id = dp.user_id
   WHERE dp.is_active = TRUE
     AND dp.user_id != p_user_id
-    AND dp.lat IS NOT NULL
+    AND dp.geom IS NOT NULL
+    AND (
+      p_max_km IS NULL OR 
+      ST_DWithin(dp.geom, p_geom, p_max_km * 1000)
+    )
     AND dp.user_id NOT IN (
       SELECT swiped_id FROM swipes WHERE swiper_id = p_user_id
-    )
-    AND (
-      p_max_km IS NULL OR
-      (6371 * acos(
-        LEAST(1.0, GREATEST(-1.0,
-          cos(radians(p_lat)) * cos(radians(dp.lat)) *
-          cos(radians(dp.lng) - radians(p_lng)) +
-          sin(radians(p_lat)) * sin(radians(dp.lat))
-        ))
-      )) <= p_max_km
     )
   ORDER BY distance_km ASC
   LIMIT p_limit;
