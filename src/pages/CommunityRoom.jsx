@@ -84,6 +84,8 @@ export default function CommunityRoom() {
     const [capturedDataUrl, setCapturedDataUrl] = useState(null);
     const [cameraError, setCameraError] = useState(null);
 
+    const isGenderRoom = roomId === 'women' || roomId === 'men';
+
     // Mapper to match UI expectations
     const mapPosts = (data) => {
         return data.map(p => {
@@ -91,13 +93,14 @@ export default function CommunityRoom() {
             const rawReplies = Array.isArray(p.replies) ? p.replies : [];
             // Robust roomId matching
             const pRoomId = p.room_id || p.roomId || roomId;
-            
+
             return {
                 id: p.id,
-                userId: p.user_id,
-                username: p.user?.name || p.name || 'Anonymous',
-                userAvatar: p.user?.photo_url || p.avatar_url || null,
-                initials: (p.user?.name || p.name || 'AN').substring(0, 2).toUpperCase(),
+                // Gender rooms: always anonymous — never expose real identity
+                userId: isGenderRoom ? null : p.user_id,
+                username: isGenderRoom ? 'Anonymous' : (p.user?.name || p.name || 'Anonymous'),
+                userAvatar: isGenderRoom ? null : (p.user?.photo_url || p.avatar_url || null),
+                initials: isGenderRoom ? 'AN' : (p.user?.name || p.name || 'AN').substring(0, 2).toUpperCase(),
                 content: p.content || '',
                 roomId: pRoomId,
                 mediaUrl: p.media_url || null,
@@ -109,6 +112,10 @@ export default function CommunityRoom() {
                     : defaultReactions,
                 replies: rawReplies.map(r => ({
                     ...r,
+                    // Also anonymize replies in gender rooms
+                    name: isGenderRoom ? 'Anonymous' : (r.name || 'Anonymous'),
+                    initials: isGenderRoom ? 'AN' : (r.name || 'AN').substring(0, 2).toUpperCase(),
+                    userId: isGenderRoom ? null : r.user_id,
                     timestamp: r.timestamp ? new Date(r.timestamp) : new Date(),
                 })),
                 commentsCount: p.comments_count || 0,
@@ -274,11 +281,12 @@ export default function CommunityRoom() {
 
         const reply = {
             id: `r_${Date.now()}`,
-            user: user.name || user.user_metadata?.full_name || 'Anonymous',
-            initials: (user.name || user.user_metadata?.full_name || 'AN').substring(0, 2).toUpperCase(),
+            user: isGenderRoom ? 'Anonymous' : (user.name || user.user_metadata?.full_name || 'Anonymous'),
+            name: isGenderRoom ? 'Anonymous' : (user.name || user.user_metadata?.full_name || 'Anonymous'),
+            initials: isGenderRoom ? 'AN' : (user.name || user.user_metadata?.full_name || 'AN').substring(0, 2).toUpperCase(),
             message: newText.trim(),
             timestamp: new Date().toISOString(),
-            userId: user.id
+            userId: isGenderRoom ? null : user.id
         };
 
         // Optimistic update
@@ -319,10 +327,10 @@ export default function CommunityRoom() {
         const tempId = `temp-${Date.now()}`;
         const optimisticPost = {
             id: tempId,
-            userId: user.id,
-            username: user.name || user.user_metadata?.full_name || 'You',
-            userAvatar: null, // Could use auth user photo if available locally
-            initials: (user.name || user.user_metadata?.full_name || 'YOU').substring(0, 2).toUpperCase(),
+            userId: isGenderRoom ? null : user.id,
+            username: isGenderRoom ? 'Anonymous' : (user.name || user.user_metadata?.full_name || 'You'),
+            userAvatar: null,
+            initials: isGenderRoom ? 'AN' : (user.name || user.user_metadata?.full_name || 'YOU').substring(0, 2).toUpperCase(),
             content: newPostContent.trim(),
             mediaUrl: filePreview, // Show local preview immediately
             mediaType: fileType,
@@ -515,10 +523,10 @@ export default function CommunityRoom() {
                         {/* Post Header */}
                         <div className="px-4 pt-3.5 pb-2 flex items-center gap-3">
                             <div
-                                onClick={() => navigate(`/profile/${post.userId}`)}
-                                className={`w-9 h-9 rounded-full bg-gradient-to-br ${room.gradient} flex items-center justify-center text-white text-[11px] font-bold cursor-pointer overflow-hidden`}
+                                onClick={() => !isGenderRoom && post.userId && navigate(`/profile/${post.userId}`)}
+                                className={`w-9 h-9 rounded-full bg-gradient-to-br ${room.gradient} flex items-center justify-center text-white text-[11px] font-bold overflow-hidden ${!isGenderRoom && post.userId ? 'cursor-pointer' : ''}`}
                             >
-                                {post.userAvatar ? (
+                                {!isGenderRoom && post.userAvatar ? (
                                     <img src={post.userAvatar} alt={post.username} className="w-full h-full object-cover" />
                                 ) : (
                                     post.initials
@@ -526,10 +534,11 @@ export default function CommunityRoom() {
                             </div>
                             <div className="flex-1">
                                 <span
-                                    onClick={() => navigate(`/profile/${post.userId}`)}
-                                    className="text-sm font-semibold hover:underline cursor-pointer"
+                                    onClick={() => !isGenderRoom && post.userId && navigate(`/profile/${post.userId}`)}
+                                    className={`text-sm font-semibold ${!isGenderRoom && post.userId ? 'hover:underline cursor-pointer' : ''}`}
                                 >
                                     {post.username}
+                                    {isGenderRoom && <span className="ml-1.5 text-[10px] font-normal text-gray-400 bg-gray-100 dark:bg-white/5 px-1.5 py-0.5 rounded-full">🔒 anon</span>}
                                 </span>
                                 <span className="text-[11px] text-gray-400 ml-2">{getTimeAgo(post.timestamp)}</span>
                                 {post.isOptimistic && <span className="text-[10px] text-primary ml-2 italic">Sending...</span>}
@@ -614,18 +623,18 @@ export default function CommunityRoom() {
                                 {post.replies?.map((reply, idx) => (
                                     <div key={reply.id || idx} className="px-4 py-3 flex items-start gap-2.5 border-b border-gray-100 dark:border-white/5 last:border-0">
                                         <div
-                                            onClick={() => navigate(`/profile/${reply.userId}`)}
-                                            className="w-6 h-6 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center text-white text-[9px] font-bold flex-shrink-0 mt-0.5 cursor-pointer"
+                                            onClick={() => !isGenderRoom && reply.userId && navigate(`/profile/${reply.userId}`)}
+                                            className={`w-6 h-6 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center text-white text-[9px] font-bold flex-shrink-0 mt-0.5 ${!isGenderRoom && reply.userId ? 'cursor-pointer' : ''}`}
                                         >
-                                            {reply.initials}
+                                            {reply.initials || 'AN'}
                                         </div>
                                         <div>
                                             <div className="flex items-center gap-1.5">
                                                 <span
-                                                    onClick={() => navigate(`/profile/${reply.userId}`)}
-                                                    className="text-[11px] font-semibold cursor-pointer hover:underline"
+                                                    onClick={() => !isGenderRoom && reply.userId && navigate(`/profile/${reply.userId}`)}
+                                                    className={`text-[11px] font-semibold ${!isGenderRoom && reply.userId ? 'cursor-pointer hover:underline' : ''}`}
                                                 >
-                                                    {reply.user}
+                                                    {isGenderRoom ? 'Anonymous' : (reply.user || reply.name || 'Anonymous')}
                                                 </span>
                                                 <span className="text-[10px] text-gray-400">{getTimeAgo(reply.timestamp)}</span>
                                             </div>

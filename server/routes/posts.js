@@ -38,14 +38,22 @@ router.get('/', optionalAuth, async (req, res) => {
   const denied = roomAccessDenied(req.user, room_id);
   if (denied) return res.status(403).json({ error: denied });
 
+  const isGenderRoom = !!ROOM_GENDER[room_id];
+
   try {
     const params = [parseInt(limit), parseInt(offset)];
     const conditions = [];
     if (user_id) { params.push(user_id); conditions.push(`p.user_id = $${params.length}`); }
     if (room_id) { params.push(room_id); conditions.push(`p.room_id = $${params.length}`); }
+    // Gender rooms: only show posts from the last 24 hours (auto-expire)
+    if (isGenderRoom) conditions.push(`p.created_at > NOW() - INTERVAL '24 hours'`);
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+    // Gender rooms: never expose the poster's identity (strip name/avatar)
+    const userSelect = isGenderRoom
+      ? `NULL::text as name, NULL::text as avatar_url, false as is_verified`
+      : `u.name, u.avatar_url, u.is_verified`;
     const { rows } = await db.query(
-      `SELECT p.*, u.name, u.avatar_url, u.is_verified
+      `SELECT p.*, ${userSelect}
        FROM posts p JOIN users u ON u.id = p.user_id
        ${where}
        ORDER BY p.created_at DESC
@@ -74,7 +82,11 @@ router.post('/', requireAuth, async (req, res) => {
       [req.user.id, content, media_url || null, media_type || null, media_name || null, room_id,
        req.user.name, req.user.avatar_url || null]
     );
-    const post = rows[0];
+    let post = rows[0];
+    // Gender rooms: strip poster identity before responding and broadcasting
+    if (ROOM_GENDER[room_id]) {
+      post = { ...post, name: null, avatar_url: null, is_verified: false };
+    }
     res.status(201).json(post);
     // Broadcast to community room in real-time
     getIO()?.to(`community:${room_id}`).emit('new_community_post', post);
@@ -141,11 +153,12 @@ router.post('/:id/reply', requireAuth, async (req, res) => {
       const denied = roomAccessDenied(req.user, postRows[0].room_id);
       if (denied) return res.status(403).json({ error: denied });
     }
+    const isGenderRoomReply = !!ROOM_GENDER[postRows[0]?.room_id];
     const reply = {
       id: require('uuid').v4(),
-      user_id: req.user.id,
-      name: req.user.name,
-      avatar_url: req.user.avatar_url,
+      user_id: isGenderRoomReply ? null : req.user.id,
+      name: isGenderRoomReply ? null : req.user.name,
+      avatar_url: isGenderRoomReply ? null : req.user.avatar_url,
       content,
       created_at: new Date().toISOString(),
     };
