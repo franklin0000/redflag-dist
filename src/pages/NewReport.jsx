@@ -3,9 +3,6 @@ import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../context/ToastContext';
 import { reportsService } from '../services/reportsService';
-import { useAccount, useWriteContract, useReadContract } from 'wagmi';
-import { parseEther } from 'viem';
-import { RFLAG_ADDRESS, RADAR_CONTRACT_ADDRESS, ERC20_ABI, REDFLAG_RADAR_ABI } from '../config/contracts';
 export default function NewReport() {
     const navigate = useNavigate();
     const fileInputRef = useRef(null);
@@ -37,28 +34,6 @@ export default function NewReport() {
         }
     };
 
-    // Web3 State
-    const { address } = useAccount();
-    const { writeContractAsync } = useWriteContract();
-
-    // Read Allowance
-    const { data: allowance } = useReadContract({
-        address: RFLAG_ADDRESS,
-        abi: ERC20_ABI,
-        functionName: 'allowance',
-        args: [address, RADAR_CONTRACT_ADDRESS],
-        query: { enabled: !!address }
-    });
-
-    // Read Balance
-    const { data: balance } = useReadContract({
-        address: RFLAG_ADDRESS,
-        abi: ERC20_ABI,
-        functionName: 'balanceOf',
-        args: [address],
-        query: { enabled: !!address }
-    });
-
     const handleSubmit = async () => {
         if (!name.trim()) {
             toast.warning("Please provide the person's name.");
@@ -66,79 +41,35 @@ export default function NewReport() {
         }
 
         try {
-            if (!address) {
-                toast.error("Por favor, conecta tu wallet primero.");
-                return;
-            }
-
-            const cost = parseEther('50'); // 50 $RFLAG
-
-            if (!balance || balance < cost) {
-                toast.error("Balance insuficiente de $RFLAG. Por favor compra más.");
-                return;
-            }
-
             setStatus('uploading');
 
-            // 1. Blockchain Payment Flow
-            try {
-                if (!allowance || allowance < cost) {
-                    toast.info("Aprobando 50 $RFLAG para el Radar...");
-                    const approveTx = await writeContractAsync({
-                        address: RFLAG_ADDRESS,
-                        abi: ERC20_ABI,
-                        functionName: 'approve',
-                        args: [RADAR_CONTRACT_ADDRESS, cost],
-                    });
-                    // Note: In production we should wait for the receipt here.
-                    toast.success("Aprobación enviada. Confirmando...");
-                }
-
-                toast.info("Pagando publicación en el Radar...");
-                const reportTx = await writeContractAsync({
-                    address: RADAR_CONTRACT_ADDRESS,
-                    abi: REDFLAG_RADAR_ABI,
-                    functionName: 'reportRedFlag',
-                    args: [name || 'Unknown Location', details || 'No description'],
-                });
-                
-                toast.success("Pago on-chain confirmado!");
-            } catch (web3Error) {
-                console.error("Web3 Error:", web3Error);
-                toast.error("Fallo el pago on-chain. El reporte no fue publicado.");
-                setStatus('idle');
-                return; // Stop here, do not save off-chain
-            }
-
-            // 2. Upload Photos (Try online, but don't block submission if it fails)
+            // 1. Upload Photos
             let photoUrls = [];
             try {
                 photoUrls = await Promise.all(
                     photoFiles.map(file => reportsService.uploadEvidence(file))
                 );
             } catch (uploadError) {
-                console.warn("Photo upload failed, proceeding with offline submission:", uploadError);
+                console.warn("Photo upload failed, proceeding without photos:", uploadError);
             }
 
             setStatus('submitting');
 
-            // 3. Create Report in off-chain DB
-
+            // 2. Create Report in DB (anonymous — no wallet required)
             await reportsService.createReport({
                 name,
                 handle,
                 details,
                 selectedFlags,
                 photos: photoUrls,
-                severity: photoUrls.length > 0 ? 'high' : 'medium' 
+                severity: photoUrls.length > 0 ? 'high' : 'medium'
             });
 
             setStatus('success');
-            toast.success("Report submitted! +100 $RFLAG si es confirmado 🪙");
+            toast.success("Report submitted anonymously! 🔒");
 
-            // 3. Navigate back
             setTimeout(() => {
-                navigate('/reports'); // or home
+                navigate('/reports');
             }, 1000);
 
         } catch (error) {
