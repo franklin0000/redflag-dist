@@ -4,6 +4,6 @@ services:
     runtime: node
     region: oregon
     plan: starter
-    buildCommand: ""
-    startCommand: cd server && npm install --production && node index.js
+    buildCommand: npm install --include=dev && cd server && npm install && cd .. && npm run build
+    startCommand: node server/index.js
     autoDeploy: true
