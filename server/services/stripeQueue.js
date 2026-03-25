@@ -4,7 +4,13 @@ const Redis = require('ioredis');
 
 // BullMQ requires maxRetriesPerRequest to be configured to null
 const connection = new Redis(process.env.REDIS_URL || 'redis://127.0.0.1:6379', {
-    maxRetriesPerRequest: null 
+    maxRetriesPerRequest: null,
+    retryStrategy: (times) => Math.min(times * 500, 10000), // backoff, don't crash
+    reconnectOnError: () => true,
+    enableOfflineQueue: false,
+});
+connection.on('error', (err) => {
+    console.error('[Redis] Connection error (non-fatal):', err.message);
 });
 
 const stripeQueue = new Queue('stripe-webhooks', { connection });
